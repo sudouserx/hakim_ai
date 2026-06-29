@@ -306,11 +306,11 @@ class PathChatVLM(BaseVLM):
     def _load_real_model(self) -> None:
         try:
             import torch
-            from transformers import AutoProcessor, AutoModelForImageTextToText
+            from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
             from huggingface_hub import login
         except ImportError as exc:
             raise ImportError(
-                "Real VLM requires torch, transformers, and huggingface_hub."
+                "Real VLM requires torch, transformers (>=4.39.0), and huggingface_hub."
             ) from exc
             
         import os
@@ -327,15 +327,14 @@ class PathChatVLM(BaseVLM):
                 load_in_4bit=True,
                 bnb_4bit_compute_dtype=torch.float16
             )
-            self._processor = AutoProcessor.from_pretrained(model_name)
             
-            # Using AutoModelForImageTextToText to automatically map the vision-language architecture
-            self._model = AutoModelForImageTextToText.from_pretrained(
+            # Explicitly load the processor and model mapped to the Mistral architecture
+            self._processor = LlavaNextProcessor.from_pretrained(model_name)
+            self._model = LlavaNextForConditionalGeneration.from_pretrained(
                 model_name, 
                 quantization_config=quantization_config,
                 low_cpu_mem_usage=True,
-                device_map="auto",
-                trust_remote_code=True
+                device_map="auto"
             )
         except Exception as e:
             print(f"Warning: Failed to load VLM model: {e}")
@@ -385,7 +384,6 @@ class PathChatVLM(BaseVLM):
                 **inputs, 
                 max_new_tokens=150,
                 temperature=0.4
-
             )
             
         output = self._processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
