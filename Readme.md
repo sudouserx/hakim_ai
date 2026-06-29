@@ -10,7 +10,6 @@
 
 `hakim_ai` implements the layered multi-agent architecture described in the research synthesis document, targeting gastric cancer (stomach adenocarcinoma, STAD) as the primary diagnostic domain. It acts as a comprehensive multimodal pipeline capable of integrating whole-slide images (WSI), clinical electronic health records (EHR), radiology imaging (DICOM), and molecular history.
 
-**Recent Update:** We continuously update the codebase to improve deployment robustness. A recent fix correctly scales the energy-based Out-of-Distribution (OOD) logic for independent binary tasks, resolving false abstentions on platforms like Kaggle, and updates the VLM tokenizers to suppress unnecessary warnings.
 
 ### Why gastric cancer?
 
@@ -321,10 +320,6 @@ This project integrates foundation models that require proper attribution. If yo
 ```
 
 ### UNI
-If you found our work useful in your research, please consider citing our work at:
-
-Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F.K., et al. Towards a general-purpose foundation model for computational pathology. Nat Med (2024). https://doi.org/10.1038/s41591-024-02857-3
-
 ```bibtex
 @article{chen2024uni,
   title={Towards a General-Purpose Foundation Model for Computational Pathology},
