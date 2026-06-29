@@ -215,12 +215,12 @@ mock_mode: false
 foundation_models:
   patch_encoder: uni2       # loads MahmoodLab/UNI2-h from HuggingFace
   slide_encoder: conch      # loads MahmoodLab/conch
-  vlm: pathchat             # loads MahmoodLab/PathChat
+  vlm: pathchat             # loads microsoft/llava-med-v1.5-mistral-7b (4-bit)
   use_gpu: true
   mock_mode: false
 ```
 
-Real encoder loading is integrated in `foundation_models/uni_adapter.py` and `conch_adapter.py`. The pipeline utilizes PyTorch `autocast` for memory-efficient forward passes and gracefully cleans the GPU cache (`torch.cuda.empty_cache()`) during parallel batch processing.
+Real encoder loading is integrated in `foundation_models/uni_adapter.py` and `conch_adapter.py`. The pipeline utilizes PyTorch `autocast` for memory-efficient forward passes and sequentially offloads models during execution. This memory lifecycle management ensures that the pipeline can run smoothly on memory-constrained hardware, such as a 15GB Kaggle T4 GPU.
 
 ---
 
