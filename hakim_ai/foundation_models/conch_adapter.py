@@ -133,8 +133,8 @@ class CONCHEncoder(BaseEncoder):
         if hf_token:
             login(token=hf_token)
 
-        # We assume device is set on the instance, defaulting to cpu if not
-        self.device = getattr(self, "device", "cpu")
+        # We assume device is set on the instance, defaulting to cuda if available
+        self.device = getattr(self, "device", "cuda" if torch.cuda.is_available() else "cpu")
         
         from huggingface_hub import hf_hub_download
         model_name = "MahmoodLab/CONCH"
@@ -291,7 +291,7 @@ class PathChatVLM(BaseVLM):
         if hf_token:
             login(token=hf_token)
 
-        self.device = getattr(self, "device", "cpu")
+        self.device = getattr(self, "device", "cuda" if torch.cuda.is_available() else "cpu")
         model_name = "microsoft/llava-med-v1.5-mistral-7b"
         
         try:
@@ -325,7 +325,7 @@ class PathChatVLM(BaseVLM):
             
         # Format for LLaVA
         formatted_prompt = f"USER: <image>\n{prompt}\nASSISTANT:"
-        inputs = self._processor(text=formatted_prompt, images=patch, return_tensors="pt").to(self.device)
+        inputs = self._processor(text=formatted_prompt, images=patch, return_tensors="pt").to(self._model.device)
         
         with torch.no_grad():
             generated_ids = self._model.generate(
@@ -350,7 +350,7 @@ class PathChatVLM(BaseVLM):
             
         # Format as QA for LLaVA
         formatted_question = f"USER: <image>\nQuestion: {question}\nASSISTANT: Answer:"
-        inputs = self._processor(text=formatted_question, images=patch, return_tensors="pt").to(self.device)
+        inputs = self._processor(text=formatted_question, images=patch, return_tensors="pt").to(self._model.device)
         
         with torch.no_grad():
             generated_ids = self._model.generate(

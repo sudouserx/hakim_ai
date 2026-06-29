@@ -51,9 +51,13 @@ class UNI2Encoder(BaseEncoder):
 
     EMBEDDING_DIM = 1536   # ViT-H output dimension for UNI 2
 
-    def __init__(self, mock_mode: bool = True, device: str = "cpu"):
+    def __init__(self, mock_mode: bool = True, device: str = None):
         self.mock_mode = mock_mode
-        self.device = device
+        if device is None:
+            import torch
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
         self._model = None
         if not mock_mode:
             self._load_real_model()
