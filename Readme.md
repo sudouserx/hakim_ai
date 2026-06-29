@@ -10,6 +10,8 @@
 
 `hakim_ai` implements the layered multi-agent architecture described in the research synthesis document, targeting gastric cancer (stomach adenocarcinoma, STAD) as the primary diagnostic domain. It acts as a comprehensive multimodal pipeline capable of integrating whole-slide images (WSI), clinical electronic health records (EHR), radiology imaging (DICOM), and molecular history.
 
+**Recent Update:** We continuously update the codebase to improve deployment robustness. A recent fix correctly scales the energy-based Out-of-Distribution (OOD) logic for independent binary tasks, resolving false abstentions on platforms like Kaggle, and updates the VLM tokenizers to suppress unnecessary warnings.
+
 ### Why gastric cancer?
 
 - **3rd in global cancer mortality** (GLOBOCAN 2022) with highest burden in Asia-Pacific
@@ -302,6 +304,37 @@ If you use this codebase in research, please cite:
             and TissueLab (arXiv 2509.20279)},
 }
 ```
+
+This project integrates foundation models that require proper attribution. If you use this software, you must cite **CONCH** and **UNI**:
+
+### CONCH
+```bibtex
+@article{lu2024avisionlanguage,
+  title={A visual-language foundation model for computational pathology},
+  author={Lu, Ming Y and Chen, Bowen and Williamson, Drew FK and Chen, Richard J and Liang, Ivy and Ding, Tong and Jaume, Guillaume and Odintsov, Igor and Le, Long Phi and Gerber, Georg and others},
+  journal={Nature Medicine},
+  pages={863–874},
+  volume={30},
+  year={2024},
+  publisher={Nature Publishing Group}
+}
+```
+
+### UNI
+If you found our work useful in your research, please consider citing our work at:
+
+Chen, R.J., Ding, T., Lu, M.Y., Williamson, D.F.K., et al. Towards a general-purpose foundation model for computational pathology. Nat Med (2024). https://doi.org/10.1038/s41591-024-02857-3
+
+```bibtex
+@article{chen2024uni,
+  title={Towards a General-Purpose Foundation Model for Computational Pathology},
+  author={Chen, Richard J and Ding, Tong and Lu, Ming Y and Williamson, Drew FK and Jaume, Guillaume and Chen, Bowen and Zhang, Andrew and Shao, Daniel and Song, Andrew H and Shaban, Muhammad and others},
+  journal={Nature Medicine},
+  publisher={Nature Publishing Group},
+  year={2024}
+}
+```
+*Note: Works that use UNI should also attribute ViT and DINOv2.*
 
 Key references implemented:
 - **PathFinder** (Ghezloo et al., ICCV 2025) — 4-agent NL explanation design
