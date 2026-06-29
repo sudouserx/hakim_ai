@@ -264,11 +264,11 @@ class PathChatVLM(BaseVLM):
     def _load_real_model(self) -> None:
         try:
             import torch
-            from transformers import AutoProcessor, AutoModelForCausalLM
+            from transformers import AutoProcessor, LlavaForConditionalGeneration
             from huggingface_hub import login
         except ImportError as exc:
             raise ImportError(
-                "Real PathChat requires torch, transformers, and huggingface_hub."
+                "Real VLM requires torch, transformers, and huggingface_hub."
             ) from exc
             
         import os
@@ -277,7 +277,7 @@ class PathChatVLM(BaseVLM):
             login(token=hf_token)
 
         self.device = getattr(self, "device", "cpu")
-        model_name = "MahmoodLab/PathChat"
+        model_name = "Wisdomik/Quilt-LLava-v1.5-7b"
         
         try:
             from transformers import BitsAndBytesConfig
@@ -285,17 +285,17 @@ class PathChatVLM(BaseVLM):
                 load_in_4bit=True,
                 bnb_4bit_compute_dtype=torch.float16
             )
-            # Use AutoProcessor and AutoModelForCausalLM
+            # Use AutoProcessor and LlavaForConditionalGeneration
             # Specifics depend on exact architecture, we use generic vision-language pattern
             self._processor = AutoProcessor.from_pretrained(model_name)
-            self._model = AutoModelForCausalLM.from_pretrained(
+            self._model = LlavaForConditionalGeneration.from_pretrained(
                 model_name, 
                 quantization_config=quantization_config,
                 low_cpu_mem_usage=True
             )
         except Exception as e:
             # Fallback for demonstration if model is gated/not downloaded
-            print(f"Warning: Failed to load PathChat model: {e}")
+            print(f"Warning: Failed to load VLM model: {e}")
             self._model = None
             self._processor = None
 
@@ -308,7 +308,9 @@ class PathChatVLM(BaseVLM):
         if patch is None:
             return "No image provided for description."
             
-        inputs = self._processor(text=prompt, images=patch, return_tensors="pt").to(self.device)
+        # Format for LLaVA
+        formatted_prompt = f"USER: <image>\n{prompt}\nASSISTANT:"
+        inputs = self._processor(text=formatted_prompt, images=patch, return_tensors="pt").to(self.device)
         
         with torch.no_grad():
             generated_ids = self._model.generate(
@@ -318,12 +320,10 @@ class PathChatVLM(BaseVLM):
                 do_sample=True
             )
             
-        output = self._processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        # Clean up prompt from output if needed
-        if output.startswith(prompt):
-            output = output[len(prompt):].strip()
-            
-        return output
+        # Decode only the newly generated tokens
+        input_len = inputs["input_ids"].shape[1]
+        output = self._processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
+        return output.strip()
 
     def _real_answer(self, patch: Any, question: str) -> str:
         if self._model is None or self._processor is None:
@@ -333,8 +333,8 @@ class PathChatVLM(BaseVLM):
         if patch is None:
             return "No image provided to answer the question."
             
-        # Format as QA
-        formatted_question = f"Question: {question}\nAnswer:"
+        # Format as QA for LLaVA
+        formatted_question = f"USER: <image>\nQuestion: {question}\nASSISTANT: Answer:"
         inputs = self._processor(text=formatted_question, images=patch, return_tensors="pt").to(self.device)
         
         with torch.no_grad():
@@ -342,6 +342,7 @@ class PathChatVLM(BaseVLM):
                 **inputs, 
                 max_new_tokens=150,
                 temperature=0.4
+
             )
             
         output = self._processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
