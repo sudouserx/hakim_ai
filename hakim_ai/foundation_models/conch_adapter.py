@@ -342,7 +342,8 @@ class PathChatVLM(BaseVLM):
             self._model = LlavaForConditionalGeneration.from_pretrained(
                 model_name, 
                 quantization_config=quantization_config,
-                low_cpu_mem_usage=True
+                low_cpu_mem_usage=True,
+                device_map=self.device
             )
         except Exception as e:
             # Fallback for demonstration if model is gated/not downloaded
