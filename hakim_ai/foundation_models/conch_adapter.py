@@ -32,7 +32,6 @@ class CONCHEncoder(BaseEncoder):
         self.mock_mode = mock_mode
         self.model_variant = model_variant
         self._model = None
-        self._model = None
 
     @property
     def embedding_dim(self) -> int:
@@ -124,12 +123,9 @@ class CONCHEncoder(BaseEncoder):
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         
         with torch.no_grad():
-            # Simplification: assuming text_model is available
-            # For CONCH v1.5 text encoder
             if hasattr(self._model, "encode_text"):
                 feat = self._model.encode_text(inputs["input_ids"], inputs["attention_mask"])
             else:
-                # Fallback if text encoder not bundled in timm
                 return _hash_to_vector(text, self.EMBEDDING_DIM)
                 
             feat = torch.nn.functional.normalize(feat, p=2, dim=-1)
@@ -152,22 +148,19 @@ class CONCHEncoder(BaseEncoder):
         if hf_token:
             login(token=hf_token)
 
-        # We assume device is set on the instance, defaulting to cuda if available
         self.device = getattr(self, "device", "cuda" if torch.cuda.is_available() else "cpu")
         
         from huggingface_hub import hf_hub_download
         model_name = "MahmoodLab/CONCH"
         
-        # Manually load the ViT architecture and then the CONCH weights to bypass missing config.json
         self._model = timm.create_model("vit_base_patch16_224", num_classes=0, global_pool='token')
         
         try:
             checkpoint_path = hf_hub_download(repo_id=model_name, filename="pytorch_model.bin")
             state_dict = torch.load(checkpoint_path, map_location="cpu")
-            # Filter out text encoder weights if we're only loading the vision backbone
             vision_state_dict = {k.replace('visual.', ''): v for k, v in state_dict.items() if k.startswith('visual.')}
             if not vision_state_dict:
-                vision_state_dict = state_dict # Fallback
+                vision_state_dict = state_dict
             self._model.load_state_dict(vision_state_dict, strict=False)
         except Exception as e:
             print(f"Warning: Failed to download CONCH weights: {e}")
@@ -191,7 +184,6 @@ class CONCHEncoder(BaseEncoder):
 # PathChat VLM
 # ---------------------------------------------------------------------------
 
-# Template descriptions that reflect realistic gastric cancer pathology language
 _DESCRIPTION_TEMPLATES = [
     (
         "The patch demonstrates irregular glandular architecture with loss of "
@@ -278,7 +270,6 @@ class PathChatVLM(BaseVLM):
     # ------------------------------------------------------------------
 
     def _mock_describe(self, patch: Any, prompt: str) -> str:
-        # Cycle through templates deterministically
         idx = self._call_counter % len(_DESCRIPTION_TEMPLATES)
         self._call_counter += 1
         return _DESCRIPTION_TEMPLATES[idx]
@@ -315,7 +306,7 @@ class PathChatVLM(BaseVLM):
     def _load_real_model(self) -> None:
         try:
             import torch
-            from transformers import AutoProcessor, LlavaForConditionalGeneration
+            from transformers import AutoProcessor, AutoModelForVision2Seq
             from huggingface_hub import login
         except ImportError as exc:
             raise ImportError(
@@ -336,17 +327,15 @@ class PathChatVLM(BaseVLM):
                 load_in_4bit=True,
                 bnb_4bit_compute_dtype=torch.float16
             )
-            # Use AutoProcessor and LlavaForConditionalGeneration
-            # Specifics depend on exact architecture, we use generic vision-language pattern
             self._processor = AutoProcessor.from_pretrained(model_name)
-            self._model = LlavaForConditionalGeneration.from_pretrained(
+            self._model = AutoModelForVision2Seq.from_pretrained(
                 model_name, 
                 quantization_config=quantization_config,
                 low_cpu_mem_usage=True,
-                device_map=self.device
+                device_map="auto",
+                trust_remote_code=True
             )
         except Exception as e:
-            # Fallback for demonstration if model is gated/not downloaded
             print(f"Warning: Failed to load VLM model: {e}")
             self._model = None
             self._processor = None
@@ -355,14 +344,12 @@ class PathChatVLM(BaseVLM):
         if self._model is None or self._processor is None:
             self.load()
             if self._model is None:
-                # Fallback to mock if not successfully loaded
                 return self._mock_describe(patch, prompt)
             
         import torch
         if patch is None:
             return "No image provided for description."
             
-        # Format for LLaVA
         formatted_prompt = f"USER: <image>\n{prompt}\nASSISTANT:"
         inputs = self._processor(text=formatted_prompt, images=patch, return_tensors="pt").to(self._model.device)
         
@@ -374,7 +361,6 @@ class PathChatVLM(BaseVLM):
                 do_sample=True
             )
             
-        # Decode only the newly generated tokens
         input_len = inputs["input_ids"].shape[1]
         output = self._processor.batch_decode(generated_ids[:, input_len:], skip_special_tokens=True)[0]
         return output.strip()
@@ -389,7 +375,6 @@ class PathChatVLM(BaseVLM):
         if patch is None:
             return "No image provided to answer the question."
             
-        # Format as QA for LLaVA
         formatted_question = f"USER: <image>\nQuestion: {question}\nASSISTANT: Answer:"
         inputs = self._processor(text=formatted_question, images=patch, return_tensors="pt").to(self._model.device)
         
