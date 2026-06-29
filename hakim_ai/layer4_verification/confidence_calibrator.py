@@ -169,7 +169,7 @@ def _estimate_raw_confidence(fusion: FusionResult, evidence: EvidenceBundle) -> 
     return sum(signals) / len(signals)
 
 
-def _detect_ood(fusion: FusionResult, evidence: EvidenceBundle, temperature: float = 1.0) -> Tuple[bool, Optional[str]]:
+def _detect_ood(fusion: FusionResult, evidence: EvidenceBundle, temperature: float = 1.0, threshold: float = 0.25) -> Tuple[bool, Optional[str]]:
     """
     Lightweight OOD detection.
     Real implementation: Energy-based OOD scoring using molecular logits.
@@ -180,19 +180,27 @@ def _detect_ood(fusion: FusionResult, evidence: EvidenceBundle, temperature: flo
     if evidence.navigation.top_patch_count < 3:
         return True, "insufficient_tissue"
         
-    # Energy-based OOD (Liu et al. 2020) E(x) = -T * logsumexp(logits / T)
-    # Using molecular prediction raw_logits if available
+    # Energy-based OOD for independent binary classifiers
+    # Symmetric logits: [l/2, -l/2]
     mol = fusion.molecular
     if mol.raw_logits:
         logits = list(mol.raw_logits.values())
         if logits:
-            max_logit = max(logits)
-            # numerically stable logsumexp
-            lse = max_logit + math.log(sum(math.exp((l - max_logit)/temperature) for l in logits))
-            energy = -temperature * lse
+            energies = []
+            for l in logits:
+                half_l = l / 2.0
+                m = abs(half_l)
+                # log(e^(half_l/T) + e^(-half_l/T)) = m/T + log(1.0 + math.exp(-2.0 * m / temperature))
+                lse = m / temperature + math.log(1.0 + math.exp(-2.0 * m / temperature))
+                energies.append(-temperature * lse)
+            energy = sum(energies) / len(energies)
             
-            # Arbitrary threshold for energy-based OOD detection
-            if energy > -0.5:
+            # Max energy (most uncertain, p=0.5) is -T * ln(2).
+            # Lower energy (more negative) means more confident ID data.
+            max_energy = -temperature * math.log(2)
+            
+            # If energy is within `threshold` of the maximum possible uncertainty, flag it.
+            if energy > max_energy - threshold:
                 return True, f"high_energy_feature_ambiguity (energy={energy:.2f})"
                 
     if max(
@@ -230,7 +238,7 @@ class ConfidenceCalibrator:
         logit = math.log(clamped / (1.0 - clamped))
         cal_conf = round(_temperature_scale(logit, self.cfg.temperature), 4)
 
-        is_ood, ood_source = _detect_ood(fusion, evidence, self.cfg.ood_threshold)
+        is_ood, ood_source = _detect_ood(fusion, evidence, self.cfg.temperature, self.cfg.ood_threshold)
 
         # Determine abstention
         all_issues = logic.issues + who.violations

@@ -329,7 +329,7 @@ class PathChatVLM(BaseVLM):
             )
             
             # Explicitly load the processor and model mapped to the Mistral architecture
-            self._processor = LlavaProcessor.from_pretrained(model_name)
+            self._processor = LlavaProcessor.from_pretrained(model_name, use_fast=False)
             self._processor.patch_size = 14
             self._model = LlavaForConditionalGeneration.from_pretrained(
                 model_name, 
