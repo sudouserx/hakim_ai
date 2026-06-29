@@ -280,12 +280,19 @@ class PathChatVLM(BaseVLM):
         model_name = "MahmoodLab/PathChat"
         
         try:
+            from transformers import BitsAndBytesConfig
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16
+            )
             # Use AutoProcessor and AutoModelForCausalLM
             # Specifics depend on exact architecture, we use generic vision-language pattern
             self._processor = AutoProcessor.from_pretrained(model_name)
             self._model = AutoModelForCausalLM.from_pretrained(
-                model_name, torch_dtype=torch.float16, low_cpu_mem_usage=True
-            ).to(self.device)
+                model_name, 
+                quantization_config=quantization_config,
+                low_cpu_mem_usage=True
+            )
         except Exception as e:
             # Fallback for demonstration if model is gated/not downloaded
             print(f"Warning: Failed to load PathChat model: {e}")
