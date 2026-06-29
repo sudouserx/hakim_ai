@@ -199,8 +199,12 @@ def _detect_ood(fusion: FusionResult, evidence: EvidenceBundle, temperature: flo
             # Lower energy (more negative) means more confident ID data.
             max_energy = -temperature * math.log(2)
             
-            # If energy is within `threshold` of the maximum possible uncertainty, flag it.
-            if energy > max_energy - threshold:
+            # Scale the threshold to a tight log-space delta (e.g. 0.25 -> 0.05)
+            # This flags only cases where average confidence is < ~65%
+            scaled_threshold = threshold / 5.0
+            
+            # If energy is within `scaled_threshold` of the maximum possible uncertainty, flag it.
+            if energy > max_energy - scaled_threshold:
                 return True, f"high_energy_feature_ambiguity (energy={energy:.2f})"
                 
     if max(
