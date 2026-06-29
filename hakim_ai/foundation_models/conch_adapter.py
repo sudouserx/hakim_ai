@@ -306,7 +306,7 @@ class PathChatVLM(BaseVLM):
     def _load_real_model(self) -> None:
         try:
             import torch
-            from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+            from transformers import LlavaProcessor, LlavaForConditionalGeneration
             from huggingface_hub import login
         except ImportError as exc:
             raise ImportError(
@@ -319,7 +319,7 @@ class PathChatVLM(BaseVLM):
             login(token=hf_token)
 
         self.device = getattr(self, "device", "cuda" if torch.cuda.is_available() else "cpu")
-        model_name = "microsoft/llava-med-v1.5-mistral-7b"
+        model_name = "wnkh/llava-med-v1.5-mistral-7b-hf"
         
         try:
             from transformers import BitsAndBytesConfig
@@ -329,8 +329,8 @@ class PathChatVLM(BaseVLM):
             )
             
             # Explicitly load the processor and model mapped to the Mistral architecture
-            self._processor = LlavaNextProcessor.from_pretrained(model_name)
-            self._model = LlavaNextForConditionalGeneration.from_pretrained(
+            self._processor = LlavaProcessor.from_pretrained(model_name)
+            self._model = LlavaForConditionalGeneration.from_pretrained(
                 model_name, 
                 quantization_config=quantization_config,
                 low_cpu_mem_usage=True,
