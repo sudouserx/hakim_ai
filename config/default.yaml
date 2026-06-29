@@ -1,0 +1,84 @@
+# hakim_ai — Default Configuration
+# All values here are overridable per environment.
+# Use config/test.yaml for CI and config/prod.yaml for production.
+
+pipeline_name: histopath_ai_gastric
+version: "0.1.0"
+mock_mode: true           # Set false to load real model weights
+output_dir: outputs
+log_level: INFO
+
+# ── Layer 0: Quality Control ────────────────────────────────────────────────
+qc:
+  min_stain_quality: 0.50
+  min_focus_quality: 0.50
+  min_coverage: 0.30
+  stain_normalizer: macenko    # macenko | reinhard | passthrough
+  reject_on_artifact: true
+
+# ── Layer 1: Router ─────────────────────────────────────────────────────────
+router:
+  benign_confidence_threshold: 0.85
+  escalation_confidence_threshold: 0.40
+  complexity_thresholds:
+    routine: 0.70
+    intermediate: 0.40
+
+# ── Layer 2: Navigation ──────────────────────────────────────────────────────
+navigation:
+  magnification_levels: [5, 20, 40]
+  top_k_patches: 20
+  patch_size: 512
+  encoder_model: uni2_mock     # uni2_mock | uni2
+
+# ── Layer 2: Segmentation ────────────────────────────────────────────────────
+segmentation:
+  model: mock                  # mock | hovernet | cellvit
+  tissue_classes:
+    - tumour
+    - stroma
+    - til
+    - necrosis
+    - normal_gland
+    - background
+
+# ── Layer 2: Patch Description ───────────────────────────────────────────────
+description:
+  vlm_model: pathchat_mock     # pathchat_mock | pathchat | conch
+  max_patches_to_describe: 5
+  max_tokens: 256
+
+# ── Layer 3: Molecular Prediction ────────────────────────────────────────────
+molecular:
+  model: mock
+  msi_threshold: 0.50
+  her2_threshold: 0.50
+  ebv_threshold: 0.50
+
+# ── Layer 3: RAG ─────────────────────────────────────────────────────────────
+rag:
+  knowledge_base_path: null    # null = use built-in mock knowledge base
+  top_k_similar_cases: 3
+  top_k_guidelines: 5
+  embedding_model: mock        # mock | biomed_bert | text-embedding-3
+
+# ── Layer 4: Verification ────────────────────────────────────────────────────
+verification:
+  temperature: 1.50            # temperature scaling parameter; >1 softens confidence
+  abstention_threshold: 0.35
+  ood_threshold: 0.25
+
+# ── Foundation Models ────────────────────────────────────────────────────────
+foundation_models:
+  patch_encoder: uni2
+  slide_encoder: conch
+  vlm: pathchat
+  use_gpu: false
+  mock_mode: true              # Set false to load real weights (requires HF_TOKEN)
+
+# ── Layer 6: UI ──────────────────────────────────────────────────────────────
+ui:
+  output_dir: outputs
+  html_report: true
+  mdt_export: true
+  feedback_db_path: outputs/feedback.jsonl

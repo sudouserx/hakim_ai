@@ -1,0 +1,122 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["hakim_ai*"]
+
+[project]
+name = "hakim_ai"
+version = "0.1.0"
+description = "End-to-end explainable multi-agent histopathology AI for gastric cancer / STAD"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = [
+    "histopathology", "digital-pathology", "gastric-cancer", "STAD",
+    "explainable-AI", "multi-agent", "WSI", "computational-pathology",
+    "MSI", "biomarker-prediction",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+# Runtime dependencies (lean — no ML frameworks required for mock mode)
+dependencies = [
+    "numpy>=1.24",
+    "Pillow>=10.0",
+    "pyyaml>=6.0",
+    "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+# Development and testing
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "pytest-xdist>=3.3",    # parallel test execution
+    "ruff>=0.4",            # linting
+    "mypy>=1.8",            # type checking
+]
+
+# Real model inference (GPU recommended)
+models = [
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "timm>=0.9",
+    "transformers>=4.35",
+    "huggingface_hub>=0.20",
+    "openslide-python>=1.3",
+    "scikit-learn>=1.3",
+]
+
+# Vector store for production RAG
+rag = [
+    "faiss-cpu>=1.7",
+    "sentence-transformers>=2.2",
+]
+
+# All optional extras
+all = [
+    "hakim_ai[dev,models,rag]",
+]
+
+[project.scripts]
+histopath-run = "scripts.run_pipeline:main"
+
+[project.urls]
+"Source Code" = "https://github.com/sudouserx/hakim_ai"
+"Bug Tracker" = "https://github.com/sudouserx/hakim_ai/issues"
+
+# ── Pytest ──────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m not slow')",
+    "integration: marks integration tests",
+    "gpu: marks tests requiring a GPU",
+]
+
+# ── Coverage ─────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["hakim_ai"]
+omit = ["tests/*", "scripts/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+
+# ── Ruff (linting) ──────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "B008",   # function calls in argument defaults
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.per-file-ignores]
+"tests/*" = ["S101"]   # allow assert in tests
+
+# ── Mypy ────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.10"
+strict = false
+ignore_missing_imports = true
+warn_unused_ignores = true

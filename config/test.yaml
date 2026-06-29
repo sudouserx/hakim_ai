@@ -1,0 +1,35 @@
+# hakim_ai — Test Configuration
+# Minimises execution time for CI/CD.
+# Inherits defaults and overrides only what differs.
+
+pipeline_name: histopath_ai_test
+mock_mode: true
+log_level: WARNING
+output_dir: /tmp/histopath_ai_test
+
+navigation:
+  magnification_levels: [20, 40]
+  top_k_patches: 5
+  patch_size: 256
+  encoder_model: uni2_mock
+
+description:
+  max_patches_to_describe: 2
+  max_tokens: 128
+
+rag:
+  top_k_similar_cases: 2
+  top_k_guidelines: 3
+
+verification:
+  temperature: 1.50
+  abstention_threshold: 0.20    # Lower for test — fewer abstentions
+
+foundation_models:
+  mock_mode: true
+
+ui:
+  output_dir: /tmp/histopath_ai_test
+  html_report: false
+  mdt_export: false
+  feedback_db_path: /tmp/histopath_ai_test/feedback.jsonl
