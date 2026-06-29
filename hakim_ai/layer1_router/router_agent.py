@@ -54,8 +54,10 @@ class RouterAgent:
         if self.encoder is not None and not getattr(self.encoder, "mock_mode", True) and wsi_data.thumbnail is not None:
             # Simple feature-based classification on the thumbnail
             import numpy as np
+            from PIL import Image
             thumb_np = np.array(wsi_data.thumbnail)
-            patch = thumb_np[:224, :224] if thumb_np.shape[0] >= 224 and thumb_np.shape[1] >= 224 else thumb_np
+            patch_array = thumb_np[:224, :224] if thumb_np.shape[0] >= 224 and thumb_np.shape[1] >= 224 else thumb_np
+            patch = Image.fromarray(patch_array)
             
             try:
                 # Real feature extraction

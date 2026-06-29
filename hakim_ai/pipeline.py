@@ -172,6 +172,8 @@ class HistopathologyPipeline:
                 return result
 
             # ── Layer 1: Router ──────────────────────────────────────────── #
+            if getattr(self.router, "encoder", None) is not None:
+                self.router.encoder.load()
             router_decision = self.router.run(wsi_data, qc_result)
             result.router_decision = router_decision
     
@@ -195,6 +197,14 @@ class HistopathologyPipeline:
 
             # ── Layer 2: Evidence Collection (logically parallel) ─────────── #
             nav_result = self.navigation_agent.run(wsi_data, qc_result)
+            # Unload encoder to free memory before loading VLM
+            if getattr(self.router, "encoder", None) is not None:
+                self.router.encoder.unload()
+            self._cleanup_gpu()
+
+            # Load VLM for description
+            if getattr(self.description_agent, "vlm", None) is not None:
+                self.description_agent.vlm.load()
             
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
@@ -203,6 +213,10 @@ class HistopathologyPipeline:
                 
                 seg_result = future_seg.result()
                 desc_result = future_desc.result()
+                
+            # Unload VLM
+            if getattr(self.description_agent, "vlm", None) is not None:
+                self.description_agent.vlm.unload()
                 
             # GPU memory cleanup
             self._cleanup_gpu()
@@ -215,9 +229,15 @@ class HistopathologyPipeline:
             result.evidence = evidence
 
             # ── Layer 3: Multimodal Fusion ───────────────────────────────── #
+            if getattr(self.molecular_agent, "encoder", None) is not None:
+                self.molecular_agent.encoder.load()
+
             molecular = self.molecular_agent.run(evidence)
             clinical_ctx = self.clinical_context_agent.run(clinical_data, evidence)
             knowledge = self.knowledge_agent.run(molecular, evidence)
+
+            if getattr(self.molecular_agent, "encoder", None) is not None:
+                self.molecular_agent.encoder.unload()
     
             radiology_findings = None
             if inp.radiology_path and not router_decision.skip_radiology_fusion:

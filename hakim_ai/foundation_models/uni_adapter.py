@@ -59,12 +59,25 @@ class UNI2Encoder(BaseEncoder):
         else:
             self.device = device
         self._model = None
-        if not mock_mode:
-            self._load_real_model()
+        self._model = None
 
     @property
     def embedding_dim(self) -> int:
         return self.EMBEDDING_DIM
+
+    def load(self) -> None:
+        if not self.mock_mode and self._model is None:
+            self._load_real_model()
+
+    def unload(self) -> None:
+        if self._model is not None:
+            del self._model
+            self._model = None
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     # ------------------------------------------------------------------
     # Public API
@@ -141,6 +154,9 @@ class UNI2Encoder(BaseEncoder):
         if patch is None:
             return [0.0] * self.EMBEDDING_DIM
             
+        if self._model is None:
+            self.load()
+            
         x = self._transform(patch).unsqueeze(0).to(self.device)
         
         with torch.no_grad():
@@ -162,6 +178,9 @@ class UNI2Encoder(BaseEncoder):
         valid_patches = [p for p in patches if p is not None]
         if not valid_patches:
             return [[0.0] * self.EMBEDDING_DIM for _ in patches]
+            
+        if self._model is None:
+            self.load()
             
         tensors = [self._transform(p) for p in valid_patches]
         x = torch.stack(tensors).to(self.device)

@@ -24,6 +24,14 @@ class BaseEncoder(abc.ABC):
     @abc.abstractmethod
     def embedding_dim(self) -> int: ...
 
+    def load(self) -> None:
+        """Load the foundation model weights into memory."""
+        pass
+
+    def unload(self) -> None:
+        """Unload the foundation model weights to free up memory."""
+        pass
+
     @abc.abstractmethod
     def encode_patch(self, patch: Any) -> List[float]:
         """Return a 1-D feature vector for a single patch (PIL Image or np.ndarray)."""
@@ -37,6 +45,14 @@ class BaseEncoder(abc.ABC):
 
 class BaseVLM(abc.ABC):
     """Abstract vision-language model for patch description."""
+
+    def load(self) -> None:
+        """Load the foundation model weights into memory."""
+        pass
+
+    def unload(self) -> None:
+        """Unload the foundation model weights to free up memory."""
+        pass
 
     @abc.abstractmethod
     def describe_patch(self, patch: Any, prompt: str = "") -> str:

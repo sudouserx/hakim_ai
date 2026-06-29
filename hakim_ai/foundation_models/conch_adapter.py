@@ -32,12 +32,25 @@ class CONCHEncoder(BaseEncoder):
         self.mock_mode = mock_mode
         self.model_variant = model_variant
         self._model = None
-        if not mock_mode:
-            self._load_real_model()
+        self._model = None
 
     @property
     def embedding_dim(self) -> int:
         return self.EMBEDDING_DIM
+
+    def load(self) -> None:
+        if not self.mock_mode and self._model is None:
+            self._load_real_model()
+
+    def unload(self) -> None:
+        if self._model is not None:
+            del self._model
+            self._model = None
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     def encode_patch(self, patch: Any) -> List[float]:
         if self.mock_mode:
@@ -55,6 +68,9 @@ class CONCHEncoder(BaseEncoder):
         if patch is None:
             return [0.0] * self.EMBEDDING_DIM
             
+        if self._model is None:
+            self.load()
+            
         x = self._transform(patch).unsqueeze(0).to(self.device)
         with torch.no_grad():
             with torch.autocast(device_type=self.device if self.device != "cpu" else "cpu"):
@@ -70,6 +86,9 @@ class CONCHEncoder(BaseEncoder):
         valid_patches = [p for p in patches if p is not None]
         if not valid_patches:
             return [[0.0] * self.EMBEDDING_DIM for _ in patches]
+            
+        if self._model is None:
+            self.load()
             
         tensors = [self._transform(p) for p in valid_patches]
         x = torch.stack(tensors).to(self.device)
@@ -224,8 +243,25 @@ class PathChatVLM(BaseVLM):
         self.mock_mode = mock_mode
         self._rng = random.Random(seed)
         self._call_counter = 0
-        if not mock_mode:
+        self._model = None
+        self._processor = None
+
+    def load(self) -> None:
+        if not self.mock_mode and self._model is None:
             self._load_real_model()
+
+    def unload(self) -> None:
+        if self._model is not None:
+            del self._model
+            self._model = None
+            if hasattr(self, '_processor'):
+                del self._processor
+                self._processor = None
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     def describe_patch(self, patch: Any, prompt: str = "") -> str:
         if self.mock_mode:
@@ -316,8 +352,10 @@ class PathChatVLM(BaseVLM):
 
     def _real_describe(self, patch: Any, prompt: str) -> str:
         if self._model is None or self._processor is None:
-            # Fallback to mock if not successfully loaded
-            return self._mock_describe(patch, prompt)
+            self.load()
+            if self._model is None:
+                # Fallback to mock if not successfully loaded
+                return self._mock_describe(patch, prompt)
             
         import torch
         if patch is None:
@@ -342,7 +380,9 @@ class PathChatVLM(BaseVLM):
 
     def _real_answer(self, patch: Any, question: str) -> str:
         if self._model is None or self._processor is None:
-            return self._mock_answer(question)
+            self.load()
+            if self._model is None:
+                return self._mock_answer(question)
             
         import torch
         if patch is None:
