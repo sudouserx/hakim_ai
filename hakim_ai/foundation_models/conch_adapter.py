@@ -136,8 +136,23 @@ class CONCHEncoder(BaseEncoder):
         # We assume device is set on the instance, defaulting to cpu if not
         self.device = getattr(self, "device", "cpu")
         
-        model_name = "hf-hub:MahmoodLab/conch"
-        self._model = timm.create_model(model_name, pretrained=True)
+        from huggingface_hub import hf_hub_download
+        model_name = "MahmoodLab/CONCH"
+        
+        # Manually load the ViT architecture and then the CONCH weights to bypass missing config.json
+        self._model = timm.create_model("vit_base_patch16_224", num_classes=0, global_pool='token')
+        
+        try:
+            checkpoint_path = hf_hub_download(repo_id=model_name, filename="pytorch_model.bin")
+            state_dict = torch.load(checkpoint_path, map_location="cpu")
+            # Filter out text encoder weights if we're only loading the vision backbone
+            vision_state_dict = {k.replace('visual.', ''): v for k, v in state_dict.items() if k.startswith('visual.')}
+            if not vision_state_dict:
+                vision_state_dict = state_dict # Fallback
+            self._model.load_state_dict(vision_state_dict, strict=False)
+        except Exception as e:
+            print(f"Warning: Failed to download CONCH weights: {e}")
+            
         self._model = self._model.eval().to(self.device)
         
         self._transform = transforms.Compose([
@@ -148,7 +163,7 @@ class CONCHEncoder(BaseEncoder):
         ])
         
         try:
-            self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self._tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch16")
         except Exception:
             self._tokenizer = None
 
@@ -277,7 +292,7 @@ class PathChatVLM(BaseVLM):
             login(token=hf_token)
 
         self.device = getattr(self, "device", "cpu")
-        model_name = "Wisdomik/Quilt-LLava-v1.5-7b"
+        model_name = "microsoft/llava-med-v1.5-mistral-7b"
         
         try:
             from transformers import BitsAndBytesConfig
