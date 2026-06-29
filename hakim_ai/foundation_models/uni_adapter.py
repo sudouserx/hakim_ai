@@ -54,11 +54,13 @@ class UNI2Encoder(BaseEncoder):
     def __init__(self, mock_mode: bool = True, device: str = None):
         self.mock_mode = mock_mode
         if device is None:
-            import torch
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            try:
+                import torch
+                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                self.device = "cpu"
         else:
             self.device = device
-        self._model = None
         self._model = None
 
     @property

@@ -248,7 +248,8 @@ class TestUNI2Encoder:
     def test_real_mode_raises_when_no_weights(self):
         """Real mode should raise ImportError (missing torch) or NotImplementedError."""
         with pytest.raises((NotImplementedError, ImportError)):
-            UNI2Encoder(mock_mode=False)
+            encoder = UNI2Encoder(mock_mode=False)
+            encoder.load()
 
 
 class TestCONCHEncoder:
