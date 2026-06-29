@@ -306,7 +306,7 @@ class PathChatVLM(BaseVLM):
     def _load_real_model(self) -> None:
         try:
             import torch
-            from transformers import AutoProcessor, AutoModelForVision2Seq
+            from transformers import AutoProcessor, AutoModelForImageTextToText
             from huggingface_hub import login
         except ImportError as exc:
             raise ImportError(
@@ -328,7 +328,9 @@ class PathChatVLM(BaseVLM):
                 bnb_4bit_compute_dtype=torch.float16
             )
             self._processor = AutoProcessor.from_pretrained(model_name)
-            self._model = AutoModelForVision2Seq.from_pretrained(
+            
+            # Using AutoModelForImageTextToText to automatically map the vision-language architecture
+            self._model = AutoModelForImageTextToText.from_pretrained(
                 model_name, 
                 quantization_config=quantization_config,
                 low_cpu_mem_usage=True,
