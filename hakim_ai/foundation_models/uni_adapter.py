@@ -106,7 +106,22 @@ class UNI2Encoder(BaseEncoder):
         else:
             print("Warning: HF_TOKEN not set. Model download may fail if it is gated.")
 
-        self._model = timm.create_model("hf-hub:MahmoodLab/uni2-h", pretrained=True)
+        timm_kwargs = {
+            'img_size': 224,
+            'patch_size': 14,
+            'depth': 24,
+            'num_heads': 24,
+            'init_values': 1e-5,
+            'embed_dim': 1536,
+            'mlp_ratio': 2.66667 * 2,
+            'num_classes': 0,
+            'no_embed_class': True,
+            'mlp_layer': timm.layers.SwiGLUPacked,
+            'act_layer': torch.nn.SiLU,
+            'reg_tokens': 8,
+            'dynamic_img_size': True
+        }
+        self._model = timm.create_model("hf-hub:MahmoodLab/uni2-h", pretrained=True, **timm_kwargs)
         self._model = self._model.eval().to(self.device)
         
         self._transform = transforms.Compose([
