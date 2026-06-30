@@ -54,6 +54,10 @@ models = [
     "huggingface_hub>=0.20",
     "openslide-python>=1.3",
     "scikit-learn>=1.3",
+    "flash-attn>=2.0",
+    "open_clip_torch>=2.0",
+    "h5py>=3.8",
+    "zarr>=2.16",
 ]
 
 # Vector store for production RAG

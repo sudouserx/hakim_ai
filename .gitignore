@@ -41,7 +41,7 @@ wheels/
 *.log
 data/
 datasets/
-models/
+/models/
 *.pt
 *.pth
 *.h5
