@@ -57,27 +57,19 @@ class TCGAStadDataset(Dataset):
 
 def collate_mil_bags(batch: List[Tuple[torch.Tensor, Dict[str, torch.Tensor]]]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, torch.Tensor]]:
     """
-    Collate function to pad variable-length feature bags.
-    Returns: padded_features, attention_mask, batched_labels
+    Collate function for MIL bags. 
+    Strictly expects batch_size=1 to avoid padding memory bombs.
     """
-    features = [item[0] for item in batch]
-    labels = [item[1] for item in batch]
-    
-    # Get max bag size
-    max_len = max(f.shape[0] for f in features)
-    embed_dim = features[0].shape[1]
-    
-    padded_features = torch.zeros(len(features), max_len, embed_dim)
-    mask = torch.zeros(len(features), max_len, dtype=torch.bool)
-    
-    for i, f in enumerate(features):
-        l = f.shape[0]
-        padded_features[i, :l, :] = f
-        mask[i, :l] = True
+    if len(batch) > 1:
+        raise ValueError("collate_mil_bags requires batch_size=1 to avoid memory bloat. Use gradient accumulation instead.")
         
+    features = batch[0][0].unsqueeze(0) # [1, N, D]
+    labels_dict = batch[0][1]
+    
+    mask = torch.ones(1, features.shape[1], dtype=torch.bool)
+    
     batched_labels = {
-        k: torch.stack([l[k] for l in labels])
-        for k in labels[0].keys()
+        k: v.unsqueeze(0) for k, v in labels_dict.items()
     }
     
-    return padded_features, mask, batched_labels
+    return features, mask, batched_labels

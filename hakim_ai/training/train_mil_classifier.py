@@ -34,7 +34,7 @@ def train_mil(cfg: PipelineConfig):
         print("No data found. Skipping training.")
         return
         
-    dataloader = DataLoader(dataset, batch_size=cfg.training.batch_size, shuffle=True, collate_fn=collate_mil_bags)
+    dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=collate_mil_bags)
     
     # Example for UNI2 dimensions (1536)
     embed_dim = 1536
@@ -44,37 +44,44 @@ def train_mil(cfg: PipelineConfig):
     optimizer = torch.optim.AdamW(list(mil.parameters()) + list(model.parameters()), lr=cfg.training.learning_rate, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.training.num_epochs)
     
-    bce_loss = nn.BCEWithLogitsLoss()
+    # Define Focal Loss function for binary classification
+    def focal_loss_bce(logits, targets, alpha=0.25, gamma=2.0):
+        bce = nn.functional.binary_cross_entropy_with_logits(logits, targets, reduction='none')
+        pt = torch.exp(-bce)
+        loss = alpha * (1 - pt) ** gamma * bce
+        return loss.mean()
+        
     ce_loss = nn.CrossEntropyLoss()
+    grad_accum_steps = cfg.training.batch_size if cfg.training.batch_size > 1 else 32
     
     for epoch in range(cfg.training.num_epochs):
         mil.train()
         model.train()
         
-        epoch_loss = 0.0
-        for features, mask, labels in tqdm(dataloader, desc=f"Epoch {epoch+1}/{epochs}"):
+        optimizer.zero_grad()
+        for step, (features, mask, labels) in enumerate(tqdm(dataloader, desc=f"Epoch {epoch+1}/{cfg.training.num_epochs}")):
             features = features.to(device)
             mask = mask.to(device)
             labels = {k: v.to(device) for k, v in labels.items()}
-            
-            optimizer.zero_grad()
             
             # Forward
             slide_embed, attention = mil(features, mask)
             logits = model(slide_embed)
             
-            # Multi-task loss
-            loss_msi = bce_loss(logits['msi'].squeeze(), labels['msi'])
-            loss_ebv = bce_loss(logits['ebv'].squeeze(), labels['ebv'])
+            # Multi-task loss (focal loss for rare classes MSI and EBV)
+            loss_msi = focal_loss_bce(logits['msi'].squeeze(), labels['msi'])
+            loss_ebv = focal_loss_bce(logits['ebv'].squeeze(), labels['ebv'])
             loss_lauren = ce_loss(logits['lauren'], labels['lauren'])
-            loss_her2 = ce_loss(logits['her2'], labels['her2'])
             
-            loss = loss_msi + loss_ebv + loss_lauren + loss_her2
+            loss = (loss_msi + loss_ebv + loss_lauren) / grad_accum_steps
             
             loss.backward()
-            optimizer.step()
             
-            epoch_loss += loss.item()
+            if (step + 1) % grad_accum_steps == 0 or (step + 1) == len(dataloader):
+                optimizer.step()
+                optimizer.zero_grad()
+            
+            epoch_loss += loss.item() * grad_accum_steps
             
         scheduler.step()
         print(f"Epoch {epoch+1} Loss: {epoch_loss / len(dataloader):.4f}")
