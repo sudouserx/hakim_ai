@@ -29,7 +29,7 @@ training:
   tcga_manifest_csv: /kaggle/tmp/data/tcga-stad/manifest.csv
   gashis_data_root: /kaggle/tmp/data/gashis/
   gchtid_data_root: /kaggle/tmp/data/gchtid/
-  batch_size: 128
+  batch_size: 64
   learning_rate: 0.0001
   num_epochs: 1      #20
   num_folds: 3
