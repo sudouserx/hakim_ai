@@ -39,6 +39,36 @@ class BaseDatasetHandler:
             return True
             
         dest.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Rewrite Figshare URLs to bypass AWS WAF challenge
+        if "figshare.com/ndownloader" in url:
+            url = url.replace("figshare.com/ndownloader", "ndownloader.figshare.com")
+            
+        # Try aria2c first for robust downloading
+        import subprocess
+        import shutil
+        
+        if shutil.which("aria2c"):
+            logger.info(f"Downloading {url} using aria2c...")
+            cmd = [
+                "aria2c",
+                "--continue=true",
+                "--max-connection-per-server=8",
+                "--split=8",
+                "--min-split-size=5M",
+                "--auto-file-renaming=false",
+                "--allow-overwrite=true",
+                f"--dir={dest.parent}",
+                f"--out={dest.name}",
+                url
+            ]
+            try:
+                subprocess.run(cmd, check=True)
+                return True
+            except subprocess.CalledProcessError as e:
+                logger.error(f"aria2c failed with code {e.returncode}. Falling back to requests...")
+                
+        # Fallback to requests
         headers = {}
         mode = 'wb'
         initial_pos = 0
@@ -56,7 +86,7 @@ class BaseDatasetHandler:
         if response.status_code == 416:
             logger.info(f"File {dest.name} already fully downloaded.")
             return True
-        elif response.status_code not in (200, 206):
+        elif response.status_code not in (200, 206, 302):
             logger.error(f"Failed to download {url}: Status {response.status_code}")
             return False
             

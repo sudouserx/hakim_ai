@@ -108,8 +108,8 @@ training:
 data:
   data_root: data/
   tcga_stad_url: "https://www.cancerimagingarchive.net/collection/tcga-stad/"
-  gashis_url: "https://figshare.com/articles/dataset/GasHisSDB/15066147"
-  gchtid_url: "https://figshare.com/articles/dataset/Gastric_Cancer_Histopathology_Tissue_Image_Dataset_GCHTID_/25954813"
+  gashis_url: "https://figshare.com/ndownloader/files/28969725"
+  gchtid_url: "https://figshare.com/ndownloader/files/46765759"
   train_ratio: 0.70
   val_ratio: 0.15
   test_ratio: 0.15

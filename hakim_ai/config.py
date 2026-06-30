@@ -121,8 +121,8 @@ class DataConfig:
     data_root: str = "data/"
     # Official dataset URLs (page or direct download)
     tcga_stad_url: str = "https://www.cancerimagingarchive.net/collection/tcga-stad/"
-    gashis_url: str = "https://figshare.com/articles/dataset/GasHisSDB/15066147"
-    gchtid_url: str = "https://figshare.com/articles/dataset/Gastric_Cancer_Histopathology_Tissue_Image_Dataset_GCHTID_/25954813"
+    gashis_url: str = "https://figshare.com/ndownloader/files/28969725"
+    gchtid_url: str = "https://figshare.com/ndownloader/files/46765759"
     # Split ratios
     train_ratio: float = 0.70
     val_ratio: float = 0.15
