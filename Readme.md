@@ -70,7 +70,22 @@
 ```bash
 git clone https://github.com/sudouserx/hakim_ai
 cd hakim_ai
-pip install -e ".[dev]"
+pip install -e ".[dev,data]"
+```
+
+### Dataset Preparation
+
+The pipeline includes an automated data manager to acquire and preprocess datasets from their official sources:
+
+```bash
+# Download and prepare all datasets (TCGA-STAD, GasHisSDB, GCHTID)
+python scripts/prepare_data.py --all
+
+# Download a specific dataset
+python scripts/prepare_data.py --dataset tcga-stad
+
+# Preview operations without downloading
+python scripts/prepare_data.py --all --dry-run
 ```
 
 ### Run the demo
@@ -128,11 +143,13 @@ hakim_ai/
 │   ├── layer5_synthesis/       # Diagnosis and Report construction
 │   ├── layer6_interface/       # HTML rendering and structured feedback capture
 │   ├── models/                 # PyTorch architectures (ABMIL, MultiTaskHead)
-│   ├── training/               # Model fine-tuning logic (PyTorch loops) and dataset loaders
+│   ├── training/               # Model fine-tuning logic, dataset loaders, and data manager
+│   │   └── data_manager.py     # Central orchestrator for dataset acquisition
 │   └── utils/                  # Core image processing, masking, and FAISS store utilities
 ├── scripts/
 │   ├── run_pipeline.py         # CLI entry point
 │   ├── calibrate_thresholds.py # Threshold calibration via PyTorch inference
+│   ├── prepare_data.py         # CLI for downloading/preparing datasets
 │   └── demo.py                 # annotated walkthrough
 └── pyproject.toml
 ```
@@ -152,6 +169,17 @@ qc:
   min_stain_quality: 0.50
   min_coverage: 0.30          # Scales dynamically for biopsies vs large resections
 
+segmentation:
+  num_classes: 7
+  tissue_classes:
+    - background
+    - tumour
+    - stroma
+    - til
+    - necrosis
+    - normal_gland
+    - muscle
+
 molecular:
   msi_threshold: 0.50         # P(MSI-H) above this → MSI-H label
 
@@ -159,6 +187,16 @@ verification:
   calibrated: true            # utilizes optimized thresholds
   temperature: 1.50           # temperature scaling parameters
   abstention_threshold: 0.35
+
+data:
+  data_root: data/
+  tcga_stad_url: "https://www.cancerimagingarchive.net/collection/tcga-stad/"
+  gashis_url: "https://figshare.com/articles/dataset/GasHisSDB/15066147"
+  gchtid_url: "https://figshare.com/articles/dataset/Gastric_Cancer_Histopathology_Tissue_Image_Dataset_GCHTID_/25954813"
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  gashis_patch_sizes: [160]
 
 training:
   tcga_data_root: data/tcga-stad/
@@ -230,14 +268,17 @@ The system extracts real DICOM metadata via `pydicom` to provide radiology conte
 
 ## Datasets
 
-The pipeline expects data directories configured directly in the `TrainingConfig` layer, targeting the specific schemas of distinct open-source datasets:
+The pipeline expects data directories configured directly in the `TrainingConfig` layer, targeting the specific schemas of distinct open-source datasets. Use the included `prepare_data.py` script to automatically download, split, and format the sources into training-ready artifacts.
 
-| Dataset | Size | Access | Config Mapping |
+| Dataset | Content | Access | Handler Mechanics |
 |---|---|---|---|
-| TCGA-STAD | ~380 WSIs + RNAseq | Public (GDC portal) | `tcga_feature_dir`, `tcga_manifest_csv` |
-| GasHisSDB | 245K patches | Public (Zenodo) | `gashis_data_root` |
-| GCHTID | 31K images, TME labels | Public (figshare 2024) | `gchtid_data_root` |
-| NCT-CRC-HE-100K | 100K patches | Public (Zenodo) | Pretraining patch encoder |
+| TCGA-STAD | ~400 WSIs + Clinical | Public (GDC portal) | Queries SVS UUIDs from GDC API. Reconstructs clinical metadata by merging demography from cBioPortal `stad_tcga` with molecular targets (MSI, EBV, Lauren) from `stad_tcga_pub`. |
+| GasHisSDB | 245K patches | Public (Zenodo) | Downloads raw `.rar` archive, strictly filters patches to 160×160 resolution, and generates a standardized train/val/test split. |
+| GCHTID | 31K images, TME labels | Public (figshare 2024) | Automatically translates the source 9-class annotation scheme into a robust 7-class taxonomy, generating multi-class pseudo-masks. |
+| NCT-CRC-HE-100K | 100K patches | Public (Zenodo) | Pretraining patch encoder (external dependency). |
+
+> [!WARNING]
+> GCHTID labels are weak proxy labels derived from cross-domain transfer (NCT-CRC-HE-100K colorectal annotations applied to gastric WSIs). Downstream models should be treated as tile-level tissue-composition estimators rather than pixel-precise boundary segmenters.
 
 ---
 

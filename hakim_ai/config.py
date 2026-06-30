@@ -59,11 +59,11 @@ class NavigationConfig:
 class SegmentationConfig:
     model: str = "segformer"                # "segformer" | "hovernet" | "cellvit"
     checkpoint_path: str = "checkpoints/segformer_gchtid.pt"
-    num_classes: int = 6
+    num_classes: int = 7
     patch_size: int = 512
     tissue_classes: List[str] = field(
         default_factory=lambda: [
-            "tumour", "stroma", "til", "necrosis", "normal_gland", "background"
+            "background", "tumour", "stroma", "til", "necrosis", "normal_gland", "muscle"
         ]
     )
 
@@ -116,6 +116,26 @@ class TrainingConfig:
 
 
 @dataclass
+class DataConfig:
+    """Dataset acquisition and preprocessing settings."""
+    data_root: str = "data/"
+    # Official dataset URLs (page or direct download)
+    tcga_stad_url: str = "https://www.cancerimagingarchive.net/collection/tcga-stad/"
+    gashis_url: str = "https://figshare.com/articles/dataset/GasHisSDB/15066147"
+    gchtid_url: str = "https://figshare.com/articles/dataset/Gastric_Cancer_Histopathology_Tissue_Image_Dataset_GCHTID_/25954813"
+    # Split ratios
+    train_ratio: float = 0.70
+    val_ratio: float = 0.15
+    test_ratio: float = 0.15
+    # Patch size filter for GasHisSDB (only these sizes are kept)
+    gashis_patch_sizes: List[int] = field(default_factory=lambda: [160])
+    # Download settings
+    max_retries: int = 3
+    chunk_size_mb: int = 8
+    verify_checksums: bool = True
+
+
+@dataclass
 class FoundationModelConfig:
     patch_encoder: str = "uni2"        # "uni2" | "virchow2" | "gigapath"
     slide_encoder: str = "conch"       # "conch" | "titan"
@@ -154,6 +174,7 @@ class PipelineConfig:
     foundation_models: FoundationModelConfig = field(default_factory=FoundationModelConfig)
     ui: UIConfig = field(default_factory=UIConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
+    data: DataConfig = field(default_factory=DataConfig)
     parallel_multi_slide: bool = False
 
     # ------------------------------------------------------------------ #
@@ -183,6 +204,7 @@ class PipelineConfig:
             "foundation_models": FoundationModelConfig,
             "ui": UIConfig,
             "training": TrainingConfig,
+            "data": DataConfig,
         }
         cfg = cls()
         for key, val in d.items():

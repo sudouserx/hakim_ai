@@ -1,5 +1,12 @@
 """
 GCHTID Dataset Loader for training segmentation models (SegFormer/HoVerNet).
+
+WARNING — Label provenance:
+    GCHTID labels are weak proxy labels derived from cross-domain transfer
+    (NCT-CRC-HE-100K colorectal annotations → gastric cancer WSIs via model
+    prediction with whole-slide pathologist review, NOT per-patch annotation).
+    Downstream segmentation models trained on this data should be treated as
+    tile-level tissue-composition estimators, not boundary-accurate segmenters.
 """
 from __future__ import annotations
 
@@ -14,8 +21,9 @@ import torchvision.transforms as T
 class GCHTIDDataset(Dataset):
     """
     Gastric Cancer Histology Tissue Image Dataset (GCHTID).
-    Provides image and 6-channel mask pairs for semantic segmentation.
-    Classes: 0=background, 1=tumour, 2=stroma, 3=TIL, 4=necrosis, 5=normal_gland
+    Provides image and 7-channel mask pairs for semantic segmentation.
+    Classes: 0=background, 1=tumour, 2=stroma, 3=TIL, 4=necrosis,
+             5=normal_gland, 6=muscle
     """
     def __init__(self, data_root: str, split: str = 'train', img_size: int = 512):
         self.img_dir = os.path.join(data_root, split, 'images')

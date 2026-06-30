@@ -36,15 +36,16 @@ navigation:
 segmentation:
   model: segformer             # mock | segformer | hovernet | cellvit
   checkpoint_path: checkpoints/segformer_gchtid.pt
-  num_classes: 6
+  num_classes: 7
   patch_size: 512
   tissue_classes:
+    - background
     - tumour
     - stroma
     - til
     - necrosis
     - normal_gland
-    - background
+    - muscle
 
 # ── Layer 2: Patch Description ───────────────────────────────────────────────
 description:
@@ -102,3 +103,17 @@ training:
   num_folds: 5
   checkpoint_dir: checkpoints/
   device: auto
+
+# ── Data Acquisition ────────────────────────────────────────────────────────
+data:
+  data_root: data/
+  tcga_stad_url: "https://www.cancerimagingarchive.net/collection/tcga-stad/"
+  gashis_url: "https://figshare.com/articles/dataset/GasHisSDB/15066147"
+  gchtid_url: "https://figshare.com/articles/dataset/Gastric_Cancer_Histopathology_Tissue_Image_Dataset_GCHTID_/25954813"
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  gashis_patch_sizes: [160]
+  max_retries: 3
+  chunk_size_mb: 8
+  verify_checksums: true
