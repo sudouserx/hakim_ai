@@ -1,7 +1,7 @@
 """
 Shared pytest fixtures for hakim_ai tests.
 
-All fixtures use mock/synthetic data — no real WSI files, model weights,
+All fixtures use synthetic data — no real WSI files, model weights,
 or GPU are required. The full test suite runs in <10 seconds.
 """
 from __future__ import annotations
@@ -107,9 +107,17 @@ def pipeline_input_with_radiology(wsi_input, clinical_input) -> PipelineInput:
 
 @pytest.fixture
 def wsi_data(wsi_input) -> WSIData:
-    from hakim_ai.layer0_input import MockWSILoader
-    loader = MockWSILoader(seed=42)
-    return loader.load(wsi_input)
+    return WSIData(
+        patient_id=wsi_input.patient_id,
+        wsi_path=wsi_input.wsi_path,
+        thumbnail=[[[255, 255, 255] for _ in range(5)] for _ in range(5)],
+        tile_paths=[],
+        level_dimensions=[(1000, 1000)],
+        level_count=1,
+        mpp=0.25,
+        metadata={},
+        slide_handle=None,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +161,7 @@ def malignant_router_decision() -> RouterDecision:
         confidence=0.72,
         task_type=TaskType.BIOMARKER_PREDICTION,
         escalate_to_human=False,
-        routing_rationale="Mock malignant routing decision.",
+        routing_rationale="Synthetic malignant routing decision.",
     )
 
 

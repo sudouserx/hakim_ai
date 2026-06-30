@@ -2,7 +2,7 @@
 Abstract base class for all foundation model adapters.
 
 Pattern: every real model (UNI 2, CONCH, PathChat, Virchow 2) implements
-BaseEncoder / BaseVLM. Mock adapters return deterministic synthetic vectors
+BaseEncoder / BaseVLM. Test adapters return deterministic synthetic vectors
 so the pipeline runs end-to-end without GPU or model weights.
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ class BaseEncoder(abc.ABC):
         return feats
         
     def _validate_feature(self, feat: Any) -> None:
-        """Post-condition validation to prevent mock/real drift."""
+        """Post-condition validation to prevent test/real drift."""
         if not isinstance(feat, list):
             raise TypeError(f"Encoder must return a list of floats, got {type(feat)}")
         if len(feat) != self.embedding_dim:

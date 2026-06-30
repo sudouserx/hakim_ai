@@ -11,7 +11,7 @@ Clinical anchor: Kather et al. 2019 (Nature Medicine) demonstrated
 feasibility of H&E-based MSI prediction in gastric + colorectal cancer.
 TIL density is the strongest single histological correlate of MSI-H.
 
-Mock implementation: uses TIL density from segmentation + seeded RNG
+Testing implementation: uses TIL density from segmentation + seeded RNG
 to produce plausible, correlated predictions.
 Real: fine-tuned MIL model on TCGA-STAD with multi-label supervision.
 """

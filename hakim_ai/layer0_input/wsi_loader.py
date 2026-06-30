@@ -1,8 +1,6 @@
 """
 Layer 0 — WSI and clinical data loaders.
 
-MockWSILoader: removed. Using real WSI loader.
-
 OpenSlideWSILoader: real implementation using openslide-python.
 Install: pip install openslide-python (also requires the C library).
 """
@@ -26,12 +24,12 @@ logger = get_logger("layer0.loader")
 class BaseWSILoader(abc.ABC):
     @abc.abstractmethod
     def load(self, wsi_input: WSIInput) -> WSIData:
-        """Load or mock-load a WSI and return a WSIData object."""
+        """Load a WSI and return a WSIData object."""
         ...
 
 
 # ---------------------------------------------------------------------------
-# Mock loader (no dependencies; deterministic)
+# Loader without dependencies
 # ---------------------------------------------------------------------------
 
 

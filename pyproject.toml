@@ -27,7 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-# Runtime dependencies (lean — no ML frameworks required for mock mode)
+# Runtime dependencies (lean — no ML frameworks required)
 dependencies = [
     "numpy>=1.24",
     "Pillow>=10.0",

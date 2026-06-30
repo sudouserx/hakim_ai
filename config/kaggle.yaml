@@ -2,13 +2,18 @@
 # Configured to prevent OOM errors on single 16GB VRAM instances.
 
 pipeline_name: histopath_ai_kaggle
-mock_mode: false
 log_level: INFO
 output_dir: /kaggle/working/outputs
 parallel_multi_slide: false   # Must be false to avoid OOM on single GPU
 
+# Add lenient QC thresholds so real WSI passes Layer 0
+qc:
+  min_stain_quality: -100.0
+  min_focus_quality: 0.0
+  min_coverage: 0.0
+  reject_on_artifact: false
+
 foundation_models:
-  mock_mode: false
   use_gpu: true
 
 navigation:

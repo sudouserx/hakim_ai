@@ -1,7 +1,7 @@
 """
 Image utilities for the histopathology pipeline.
 
-All functions that touch real pixel data are clearly separated from mock
+All functions that touch real pixel data are clearly separated from test
 versions so real implementations can be swapped in without changing callers.
 """
 from __future__ import annotations
@@ -51,7 +51,7 @@ class StainNormalizerMacenko:
     def normalize_patch(self, patch: Any) -> Any:
         """Normalises a patch (PIL Image or nested list) in-place/returned."""
         if isinstance(patch, list):
-            # It's a mock list, return as is
+            # It's a list, return as is
             return patch
         
         img = np.array(patch)

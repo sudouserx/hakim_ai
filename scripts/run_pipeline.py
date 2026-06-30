@@ -4,7 +4,7 @@ Command-line interface for the hakim_ai pipeline.
 
 Usage examples
 --------------
-# Run with mock data (no real WSI needed):
+# Run with synthetic data:
 python scripts/run_pipeline.py --patient-id P001 --wsi-path /path/to/slide.svs
 
 # Run with clinical data:

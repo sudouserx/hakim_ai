@@ -100,14 +100,6 @@ You execute them from the command line using:
 
     For the Segmentation Model: python hakim_ai/training/train_segmentation.py --config config/kaggle.yaml
 
-### Run the demo
-
-```bash
-python scripts/demo.py
-```
-
-This runs the full pipeline, saves an HTML report and MDT summary, and demonstrates feedback capture.
-
 ### Run on a real slide
 
 ```bash
@@ -162,8 +154,7 @@ hakim_ai/
 ├── scripts/
 │   ├── run_pipeline.py         # CLI entry point
 │   ├── calibrate_thresholds.py # Threshold calibration via PyTorch inference
-│   ├── prepare_data.py         # CLI for downloading/preparing datasets
-│   └── demo.py                 # annotated walkthrough
+│   └── prepare_data.py         # CLI for downloading/preparing datasets
 └── pyproject.toml
 ```
 

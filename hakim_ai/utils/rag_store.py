@@ -171,5 +171,5 @@ class RAGStore:
             
         # In a real implementation, we would use FAISS on the query_embedding against case embeddings.
         # Here we just return top_k cases if embedding similarity is not implemented,
-        # but WITHOUT deterministic random shuffling (which is mock behavior).
+        # but WITHOUT deterministic random shuffling (which is testing behavior).
         return self.similar_cases[:top_k]

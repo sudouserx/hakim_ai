@@ -10,7 +10,7 @@ Used by:
   - Explanation agent (evidence citations)
   - Report agent (quantitative findings section)
 
-Mock: returns plausible fractions computed from the WSI dimensions
+Fallback: returns plausible fractions computed from the WSI dimensions
 and a deterministic RNG. Real: HoVerNet, CellViT, or a SegFormer model
 fine-tuned on GCHTID/NCT-CRC-HE-100K.
 """

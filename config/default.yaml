@@ -4,7 +4,6 @@
 
 pipeline_name: histopath_ai_gastric
 version: "0.1.0"
-mock_mode: true           # Set false to load real model weights
 output_dir: outputs
 log_level: INFO
 parallel_multi_slide: false
@@ -30,11 +29,11 @@ navigation:
   magnification_levels: [5, 20, 40]
   top_k_patches: 20
   patch_size: 512
-  encoder_model: uni2          # uni2_mock | uni2
+  encoder_model: uni2
 
 # ── Layer 2: Segmentation ────────────────────────────────────────────────────
 segmentation:
-  model: segformer             # mock | segformer | hovernet | cellvit
+  model: segformer             # segformer | hovernet | cellvit
   checkpoint_path: checkpoints/segformer_gchtid.pt
   num_classes: 7
   patch_size: 512
@@ -49,7 +48,7 @@ segmentation:
 
 # ── Layer 2: Patch Description ───────────────────────────────────────────────
 description:
-  vlm_model: pathchat          # pathchat_mock | pathchat | conch
+  vlm_model: pathchat          # pathchat | conch
   max_patches_to_describe: 5
   max_tokens: 256
 
@@ -62,10 +61,10 @@ molecular:
 
 # ── Layer 3: RAG ─────────────────────────────────────────────────────────────
 rag:
-  knowledge_base_path: null    # null = use built-in mock knowledge base
+  knowledge_base_path: null    # null = use built-in knowledge base
   top_k_similar_cases: 3
   top_k_guidelines: 5
-  embedding_model: biomed_bert # mock | biomed_bert | text-embedding-3
+  embedding_model: biomed_bert # biomed_bert | text-embedding-3
 
 # ── Layer 4: Verification ────────────────────────────────────────────────────
 verification:
@@ -81,7 +80,6 @@ foundation_models:
   slide_encoder: conch
   vlm: pathchat
   use_gpu: false
-  mock_mode: false             # True = stubs; False = load real weights
 
 # ── Layer 6: UI ──────────────────────────────────────────────────────────────
 ui:

@@ -2,13 +2,11 @@
 # Configured for high-end server environments with multiple GPUs.
 
 pipeline_name: histopath_ai_prod
-mock_mode: false
 log_level: INFO
 output_dir: /var/lib/hakim_ai/outputs
 parallel_multi_slide: true    # Enabled to utilize high CPU/RAM resources
 
 foundation_models:
-  mock_mode: false
   use_gpu: true
 
 verification:

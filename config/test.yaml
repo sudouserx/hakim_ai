@@ -3,7 +3,6 @@
 # Inherits defaults and overrides only what differs.
 
 pipeline_name: histopath_ai_test
-mock_mode: true
 log_level: WARNING
 output_dir: /tmp/histopath_ai_test
 parallel_multi_slide: false
@@ -15,7 +14,7 @@ navigation:
   encoder_model: uni2
 
 segmentation:
-  model: mock
+  model: segformer
   checkpoint_path: null
 
 description:
@@ -24,12 +23,12 @@ description:
   max_tokens: 128
 
 molecular:
-  model: mock
+  model: multi_task_head
 
 rag:
   top_k_similar_cases: 2
   top_k_guidelines: 3
-  embedding_model: mock
+  embedding_model: biomed_bert
 
 verification:
   temperature: 1.50
@@ -37,7 +36,6 @@ verification:
   calibrated: false
 
 foundation_models:
-  mock_mode: true
   use_gpu: false
 
 ui:

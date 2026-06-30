@@ -6,7 +6,7 @@ Mirrors the pathologist's multi-scale review workflow:
 
 Outputs an importance map and a ranked list of patch coordinates.
 
-Mock implementation: samples patches from a seeded grid with synthetic
+Testing implementation: samples patches from a seeded grid with synthetic
 importance scores. Real implementation: uses the UNI 2 patch encoder +
 an attention MIL head to compute per-patch importance scores, then
 selects the top-K patches across three magnification levels.

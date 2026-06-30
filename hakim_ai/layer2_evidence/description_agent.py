@@ -8,7 +8,7 @@ This is the primary explainability mechanism, following the PathFinder
 (ICCV 2025) design pattern: NL descriptions are more interpretable to
 pathologists than raw attention maps.
 
-Mock: uses PathChatVLM in mock mode (templated descriptions).
+Testing: uses PathChatVLM in templated descriptions mode.
 Real: forward selected patches through PathChat or CONCH+GPT-4 Vision.
 """
 from __future__ import annotations

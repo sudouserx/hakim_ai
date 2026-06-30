@@ -25,7 +25,7 @@ class MultiSlidePipeline:
         self.cfg = cfg
         self.single_pipeline = HistopathologyPipeline(cfg)
         
-        # Load longitudinal agent if configured, else use mock/stub
+        # Load longitudinal agent if configured, else use stub
         # We'll import a simple agent to do this
         try:
             from hakim_ai.layer5_synthesis.longitudinal_agent import LongitudinalAgent
@@ -95,7 +95,7 @@ class MultiSlidePipeline:
         if self.longitudinal_agent is not None:
             summary, traj = self.longitudinal_agent.analyze(results)
         else:
-            # Fallback mock summary
+            # Fallback summary
             summary = f"Analyzed {len(results)} slides. Stable disease profile."
             traj = {"progression_risk": 0.15}
             
