@@ -18,20 +18,27 @@ class TCGAStadDataset(Dataset):
     """
     def __init__(self, feature_dir: str, manifest_csv: str):
         self.feature_dir = feature_dir
-        self.manifest = pd.read_csv(manifest_csv)
-        # Filter to slides that have extracted features
-        self.slides = [
-            row for _, row in self.manifest.iterrows()
-            if os.path.exists(os.path.join(feature_dir, f"{row['patient_id']}.pt"))
-        ]
+        manifest = pd.read_csv(manifest_csv)
+        
+        # Create a mapping from patient_id to row data
+        patient_data = {str(row['patient_id']): row for _, row in manifest.iterrows()}
+        
+        self.slides = []
+        if os.path.exists(feature_dir):
+            for fname in os.listdir(feature_dir):
+                if not fname.endswith('.pt'):
+                    continue
+                # TCGA patient ID is typically the first 12 chars: TCGA-XX-XXXX
+                patient_id = fname[:12]
+                if patient_id in patient_data:
+                    self.slides.append((fname, patient_data[patient_id]))
 
     def __len__(self) -> int:
         return len(self.slides)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        row = self.slides[idx]
-        patient_id = row['patient_id']
-        feature_path = os.path.join(self.feature_dir, f"{patient_id}.pt")
+        fname, row = self.slides[idx]
+        feature_path = os.path.join(self.feature_dir, fname)
         
         # Load features: shape (num_patches, embedding_dim)
         features = torch.load(feature_path, weights_only=True)
