@@ -26,6 +26,7 @@ training:
   num_epochs: 20              # Fewer epochs for Kaggle time limits
   num_folds: 3
   device: cuda
+  checkpoint_dir: /kaggle/tmp/checkpoints
 
 ui:
   output_dir: outputs
