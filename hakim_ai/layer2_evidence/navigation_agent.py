@@ -142,9 +142,48 @@ class NavigationAgent:
                 patch_obj.feature_vector = p["feat"]
                 all_patches.append(patch_obj)
 
-        # Sort by importance, keep top_k
-        all_patches.sort(key=lambda p: p.importance_score, reverse=True)
-        selected = all_patches[: self.cfg.top_k_patches]
+        # Select representative patches using KMeans clustering on feature embeddings
+        # to ensure morphological diversity (phenotype representation).
+        if len(all_patches) <= self.cfg.top_k_patches:
+            selected = all_patches
+        else:
+            try:
+                from sklearn.cluster import KMeans
+                import numpy as np
+                
+                valid_patches = [p for p in all_patches if p.feature_vector is not None]
+                n_clusters = min(5, self.cfg.top_k_patches)
+                
+                if len(valid_patches) >= n_clusters:
+                    features_matrix = np.array([p.feature_vector for p in valid_patches])
+                    kmeans = KMeans(n_clusters=n_clusters, random_state=self._rng.randint(0, 10000), n_init='auto')
+                    clusters = kmeans.fit_predict(features_matrix)
+                    
+                    selected = []
+                    patches_per_cluster = self.cfg.top_k_patches // n_clusters
+                    
+                    for c in range(n_clusters):
+                        cluster_patches = [p for i, p in enumerate(valid_patches) if clusters[i] == c]
+                        cluster_patches.sort(key=lambda p: p.importance_score, reverse=True)
+                        selected.extend(cluster_patches[:patches_per_cluster])
+                        
+                    # Fill remaining slots with highest scoring unselected patches
+                    selected_set = set(id(p) for p in selected)
+                    all_patches.sort(key=lambda p: p.importance_score, reverse=True)
+                    for p in all_patches:
+                        if len(selected) >= self.cfg.top_k_patches:
+                            break
+                        if id(p) not in selected_set:
+                            selected.append(p)
+                            selected_set.add(id(p))
+                else:
+                    all_patches.sort(key=lambda p: p.importance_score, reverse=True)
+                    selected = all_patches[: self.cfg.top_k_patches]
+                    
+            except ImportError:
+                # Fallback if sklearn is not installed
+                all_patches.sort(key=lambda p: p.importance_score, reverse=True)
+                selected = all_patches[: self.cfg.top_k_patches]
 
         # Build a low-resolution importance map (16×16)
         importance_map = self._build_importance_map(selected, rows=16, cols=16)

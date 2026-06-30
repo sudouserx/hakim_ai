@@ -64,8 +64,8 @@ class MultiSlidePipeline:
         if getattr(self.cfg, "parallel_multi_slide", False):
             import concurrent.futures
             logger.info("Executing pipeline in parallel across %d slides", len(single_inputs))
-            with concurrent.futures.ProcessPoolExecutor() as executor:
-                futures = [executor.submit(_process_slide_worker, self.cfg, inp) for inp in single_inputs]
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(self.single_pipeline.run, inp) for inp in single_inputs]
                 for future, single_input in zip(futures, single_inputs):
                     try:
                         res = future.result()
@@ -108,7 +108,4 @@ class MultiSlidePipeline:
         )
 
 
-def _process_slide_worker(cfg: PipelineConfig, single_input: PipelineInput) -> PipelineResult:
-    """Helper function for ProcessPoolExecutor to instantiate and run the pipeline."""
-    pipeline = HistopathologyPipeline(cfg)
-    return pipeline.run(single_input)
+
