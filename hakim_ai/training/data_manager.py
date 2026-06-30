@@ -307,6 +307,11 @@ class GasHisSDBHandler(BaseDatasetHandler):
             logger.error(f"Extraction failed: {e}")
             return
 
+        # Delete archive to save space
+        if archive_dest.exists():
+            logger.info("Deleting GasHisSDB.rar to save space...")
+            archive_dest.unlink()
+
         self._create_splits()
 
     def _create_splits(self):
@@ -360,8 +365,10 @@ class GasHisSDBHandler(BaseDatasetHandler):
                 for split_name, imgs in splits_dict.items():
                     dest_dir = self.dataset_dir / split_name / c
                     for img in imgs:
-                        # Copy to avoid destructive moves during dev
-                        shutil.copy2(img, dest_dir / img.name)
+                        # Use symlinks to save space and avoid duplicate files
+                        target_path = dest_dir / img.name
+                        if not target_path.exists():
+                            os.symlink(img.resolve(), target_path)
                         
         logger.info("GasHisSDB splits created.")
         self._write_provenance()
@@ -414,6 +421,11 @@ class GCHTIDHandler(BaseDatasetHandler):
             logger.error(f"Extraction failed: {e}")
             return
             
+        # Delete archive to save space
+        if archive_dest.exists():
+            logger.info("Deleting GCHTID.zip to save space...")
+            archive_dest.unlink()
+            
         self._create_splits_and_masks(extract_dir)
         
     def _create_splits_and_masks(self, extract_dir: Path):
@@ -464,8 +476,9 @@ class GCHTIDHandler(BaseDatasetHandler):
                 new_img_path = img_dir / f"{new_stem}.png"
                 new_mask_path = mask_dir / f"{new_stem}.png"
                 
-                # Copy image
-                shutil.copy2(img_path, new_img_path)
+                # Symlink image to save space
+                if not new_img_path.exists():
+                    os.symlink(img_path.resolve(), new_img_path)
                 
                 # Create pseudo-mask (single value per 224x224 tile)
                 # assuming 224x224 based on dataset specs

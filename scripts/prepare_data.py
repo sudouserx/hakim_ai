@@ -48,7 +48,12 @@ def main():
     if args.config:
         cfg = PipelineConfig.from_yaml(args.config)
     else:
-        cfg = PipelineConfig.default()
+        if os.environ.get("KAGGLE_KERNEL_RUN_TYPE") or os.path.exists("/kaggle/working"):
+            logger.info("Kaggle environment detected. Defaulting to config/kaggle.yaml")
+            kaggle_config_path = os.path.join(os.path.dirname(__file__), "..", "config", "kaggle.yaml")
+            cfg = PipelineConfig.from_yaml(kaggle_config_path)
+        else:
+            cfg = PipelineConfig.default()
         
     data_root = args.output_dir or cfg.data.data_root
     
