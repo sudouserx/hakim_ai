@@ -14,7 +14,7 @@
 
 - **3rd in global cancer mortality** (GLOBOCAN 2022) with highest burden in Asia-Pacific
 - **Moderate AI saturation** — explainable AI lags far behind breast/lung cancer
-- **Multiple tractable H&E tasks**: subtype (Lauren), MSI/dMMR prediction, HER2 approximation, EBV detection
+- **Multiple tractable H&E tasks**: subtype (Lauren), MSI/dMMR prediction, EBV detection
 - **Rich public multimodal data**: TCGA-STAD, GasHisSDB, GCHTID with TME annotations
 - **Clear clinical value**: MSI-H predicts pembrolizumab eligibility; HER2+ predicts trastuzumab benefit
 
@@ -23,28 +23,28 @@
 ```
 [WSI + EHR + Radiology (optional)]
         │
-  Layer 0: Input & QC          stain normalisation · artefact detection · reject/pass
+  Layer 0: Input & QC          stain normalisation · artefact detection · dynamic area-based coverage gating
         │
   Layer 1: Router / Triage     benign fast-path · complexity scoring · human escalation
         │
   Layer 2: Evidence Collection (Concurrent ThreadPool)
-        ├── Navigation Agent   multi-scale WSI browsing · importance map · ROI selection
+        ├── Navigation Agent   K-Means phenotype clustering · importance map · ROI selection
         ├── Segmentation Agent tissue compartments · TIL density · TME profile
         └── Description Agent  NL patch descriptions via VLM (PathChat / CONCH)
         │
   Layer 3: Multimodal Fusion
-        ├── Molecular Agent    MSI · Lauren · HER2 · EBV prediction from H&E
-        ├── Clinical Context   Attention-based cross-modal fusion (CONCH text embedding vs image features)
+        ├── Molecular Agent    MSI · Lauren · EBV prediction via Multi-Head Attention MIL
+        ├── Clinical Context   EHR HER2 extraction · Attention-based cross-modal fusion
         ├── Knowledge RAG      FAISS vector store semantic retrieval · WHO criteria · Guidelines
         └── Radiology Agent    DICOM parsing · CT/MRI ↔ H&E cross-modal correlation
         │
   Layer 4: Verification
         ├── Logic Agent        clinical and radiological discordance · internal consistency checks
-        ├── WHO Validator      taxonomy compliance against WHO 5th Edition (12 gastric subtypes)
+        ├── WHO Validator      taxonomy compliance against WHO 5th Edition (independent of Lauren class)
         └── Confidence Calibrator  temperature scaling · energy-based OOD detection (LogSumExp)
         │
   Layer 5: Synthesis & Reporting
-        ├── Diagnosis Agent    dynamic holistic diagnosis · grade · differentials · TNM
+        ├── Diagnosis Agent    dynamic holistic diagnosis · safe-fail human escalation · grade · TNM
         ├── Explanation Agent  NL explanation · evidence citations · counterfactual note
         └── Report Agent       structured pathology report (WHO/Lauren/TNM/biomarkers)
         │
@@ -59,7 +59,7 @@
 - Natural language explanations over heatmaps (PathFinder pattern)
 - Explicit verification before every diagnosis output (WSI-Agents pattern)
 - Graceful degradation when modalities are missing
-- Calibrated uncertainty with actionable abstention
+- Calibrated uncertainty with actionable abstention and safe-fail human escalation
 
 ---
 
@@ -118,7 +118,7 @@ hakim_ai/
 │   ├── types.py                # all typed dataclasses
 │   ├── config.py               # PipelineConfig + sub-configs + dotenv support
 │   ├── pipeline.py             # HistopathologyPipeline orchestrator (Thread-safe, GPU cleanup)
-│   ├── multi_slide_pipeline.py # ProcessPoolExecutor for concurrent slide batch processing
+│   ├── multi_slide_pipeline.py # ThreadPoolExecutor for concurrent slide batch processing
 │   ├── foundation_models/      # Encoders and VLM adapters
 │   ├── layer0_input/           # WSI Loading & QC Agents
 │   ├── layer1_router/          # Triage / routing agents
@@ -146,18 +146,18 @@ The configuration resides in the `config/` directory and is governed by `hakim_a
 ```yaml
 
 log_level: INFO
-parallel_multi_slide: false   # Enable to process multiple WSIs concurrently via ProcessPoolExecutor
+parallel_multi_slide: false   # Enable to process multiple WSIs concurrently via ThreadPoolExecutor
 
 qc:
   min_stain_quality: 0.50
-  min_coverage: 0.30
+  min_coverage: 0.30          # Scales dynamically for biopsies vs large resections
 
 molecular:
   msi_threshold: 0.50         # P(MSI-H) above this → MSI-H label
 
 verification:
   calibrated: true            # utilizes optimized thresholds
-  temperature: 1.50           # temperature scaling; >1 softens confidence
+  temperature: 1.50           # temperature scaling parameters
   abstention_threshold: 0.35
 
 training:
@@ -203,25 +203,28 @@ foundation_models:
   use_gpu: true
 ```
 
-Real encoder loading utilizes PyTorch `autocast` for memory-efficient forward passes and sequentially offloads models during execution. This memory lifecycle management ensures that the pipeline can run smoothly on memory-constrained hardware, such as a 15GB Kaggle T4 GPU. A `parallel_multi_slide` flag dynamically leverages standard process pools for environments where compute is abundant.
+Real encoder loading utilizes PyTorch `autocast` for memory-efficient forward passes and sequentially offloads models during execution. This memory lifecycle management ensures that the pipeline can run smoothly on memory-constrained hardware, such as a 15GB Kaggle T4 GPU. The multi-slide architecture streams WSI data to singleton GPU model instances via a thread-based concurrent queue to prevent VRAM thrashing and redundant instantiations.
 
 ---
 
 ## Core Capabilities
 
+### Clinical Safety & Quality Control
+The pipeline prioritizes clinical safety by implementing a robust escalation system. The `DiagnosisAgent` strictly escalates indeterminate cases (e.g., low tumor fraction with no WHO criteria match) for manual review rather than defaulting to negative diagnoses. The `QCAgent` calculates a dynamic `min_coverage` threshold, appropriately adapting to the massive difference in tissue area between endoscopic biopsies and full surgical resections.
+
 ### Model Training & Calibration
-The repository contains native training logic to fine-tune the pipeline's intelligence layers. This is supported by granular dataset configuration allowing you to specify paths for TCGA-STAD, GasHisSDB, and GCHTID explicitly. 
+The repository contains native training logic to fine-tune the pipeline's intelligence layers. The `train_mil_classifier.py` loop utilizes **Focal Loss** to penalize majority classes and learn rare minority features (EBV+, MSI-H). Memory-efficient unbatched gradient accumulation prevents tensor padding memory bombs when evaluating variable-length gigapixel MIL bags.
 
-The `calibrate_thresholds.py` script automatically runs inference over a validation set and uses Youden's J Statistic to calculate the optimal cutoffs balancing false-positives and false-negatives. The calibration logic calculates the Negative Log-Likelihood (NLL) directly on model probabilities extracted via PyTorch data loaders.
+The `calibrate_thresholds.py` script automatically runs inference over a validation set and uses Youden's J Statistic to calculate the optimal cutoffs balancing false-positives and false-negatives. 
 
-### FAISS Semantic Retrieval (RAG)
-The `KnowledgeRetrievalAgent` maintains a comprehensive vector database of the WHO 5th Edition Gastric Tumour criteria. It retrieves clinical evidence and morphological subtypes (e.g., Medullary, Micropapillary, Adenosquamous) dynamically using SentenceTransformers and FAISS, enabling the pipeline to ground diagnoses in standard pathology literature.
+### Multi-Head Attention & Morphological Phenotyping
+The `GatedAttentionMIL` module features independent attention branches for each molecular prediction task (MSI, EBV, Lauren). During evidence collection, the `NavigationAgent` applies `K-Means` clustering on the patch feature embeddings. Selecting the highest-scoring patches per cluster ensures the VLM evaluates a comprehensive set of morphological phenotypes and avoids the diffuse carcinoma blindspot.
 
 ### Advanced Verification
-Robustness is guaranteed via the `ConfidenceCalibrator` and `LogicAgent`. The calibrator calculates an energy-based Out-of-Distribution (OOD) score using the `LogSumExp` distribution across molecular logits to abstain from evaluating ambiguous samples. The logic layer identifies multimodal discordances, such as a high-stage radiological presentation contrasting a low tumor-fraction histology result.
+Robustness is guaranteed via the `ConfidenceCalibrator` and `LogicAgent`. The calibrator calculates an energy-based Out-of-Distribution (OOD) score using the `LogSumExp` distribution across molecular logits to abstain from evaluating ambiguous samples. The `WHOValidator` rigorously evaluates morphological descriptions against the WHO 5th Edition taxonomy, completely independent of the Lauren classification taxonomy.
 
 ### Attention-Based Fusion
-The system extracts real DICOM metadata via `pydicom` to provide radiology context. Cross-modal correlation fuses this and other unstructured clinical histories with the histopathology features by computing the dot-product cosine similarity between the CONCH NLP embeddings and visual patch vectors, assigning an intelligent relevance weight to textual evidence.
+The system extracts real DICOM metadata via `pydicom` to provide radiology context. Cross-modal correlation fuses this and other unstructured clinical histories with the histopathology features by computing the dot-product cosine similarity between the CONCH NLP embeddings and visual patch vectors. HER2 status is extracted exclusively via the `ClinicalContextAgent` (EHR/IHC reports) to bypass inaccurate H&E morphological hallucinations.
 
 ---
 
