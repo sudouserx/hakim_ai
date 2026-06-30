@@ -30,7 +30,8 @@ def train_segmentation(cfg: PipelineConfig):
         print("No data found. Skipping training.")
         return
         
-    dataloader = DataLoader(dataset, batch_size=cfg.training.batch_size, shuffle=True, num_workers=4)
+    safe_batch_size = min(cfg.training.batch_size, 4)
+    dataloader = DataLoader(dataset, batch_size=safe_batch_size, shuffle=True, num_workers=4)
     
     try:
         from transformers import SegformerForSemanticSegmentation
