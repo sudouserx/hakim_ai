@@ -19,9 +19,12 @@ from __future__ import annotations
 
 import math
 import random
+import os
 from typing import Optional
 
 from hakim_ai.foundation_models.base_encoder import BaseEncoder
+from hakim_ai.models.abmil import GatedAttentionMIL
+from hakim_ai.models.multi_task_head import MultiTaskHead
 from hakim_ai.config import MolecularConfig
 from hakim_ai.types import (
     EBVStatus,
@@ -52,6 +55,29 @@ class MolecularPredictionAgent:
         self.cfg = cfg
         self.encoder = encoder
         self._rng = random.Random(seed)
+        
+        # Load models
+        self.abmil = None
+        self.head = None
+        if encoder is not None:
+            try:
+                import torch
+                self.device = torch.device("cuda" if torch.cuda.is_available() and getattr(encoder, "use_gpu", False) else "cpu")
+                self.abmil = GatedAttentionMIL(input_dim=encoder.embedding_dim).to(self.device)
+                self.head = MultiTaskHead(input_dim=encoder.embedding_dim).to(self.device)
+                ckpt_path = "checkpoints/abmil_multi_task.pt"
+                if os.path.exists(ckpt_path):
+                    state = torch.load(ckpt_path, map_location=self.device, weights_only=True)
+                    if 'mil' in state:
+                        self.abmil.load_state_dict(state['mil'])
+                    if 'head' in state:
+                        self.head.load_state_dict(state['head'])
+                self.abmil.eval()
+                self.head.eval()
+            except ImportError:
+                logger.warning("Torch not available; molecular models disabled.")
+            except Exception as e:
+                logger.warning(f"Could not load molecular models: {e}")
 
     def run(self, evidence: EvidenceBundle) -> MolecularPrediction:
         logger.info("Molecular prediction started")
@@ -60,17 +86,42 @@ class MolecularPredictionAgent:
         tumour = evidence.segmentation.tumour_fraction
         features = self._aggregate_patch_features(evidence)
 
-        # MSI prediction: high TIL density is the strongest H&E correlate
-        msi_prob = self._predict_msi(til, features)
+        if self.abmil is None or self.head is None:
+            raise RuntimeError("Molecular models (abmil, head) are required for prediction.")
+            
+        import torch
+        with torch.no_grad():
+            patches = evidence.navigation.selected_patches
+            feats = [p.feature_vector for p in patches if getattr(p, "feature_vector", None) is not None]
+            if not feats:
+                raise RuntimeError("No patch features available for molecular prediction.")
+                
+            feats_t = torch.tensor(feats, dtype=torch.float32).unsqueeze(0).to(self.device)
+            slide_embed, _ = self.abmil(feats_t)
+            logits = self.head(slide_embed)
+            
+            msi_prob = round(float(torch.sigmoid(logits['msi']).item()), 4)
+            ebv_prob = round(float(torch.sigmoid(logits['ebv']).item()), 4)
+            
+            lauren_softmax = torch.softmax(logits['lauren'], dim=-1).squeeze().tolist()
+            lauren_probs = {
+                "intestinal": round(lauren_softmax[0], 4),
+                "diffuse": round(lauren_softmax[1], 4),
+                "mixed": round(lauren_softmax[2], 4)
+            }
+            lauren_class = max(lauren_probs, key=lauren_probs.get)
+            
+            her2_softmax = torch.softmax(logits['her2'], dim=-1).squeeze().tolist()
+            # 0=negative, 1=equivocal, 2=positive
+            # Probability of HER2+ is class 2
+            her2_prob = round(her2_softmax[2], 4)
+
         msi_status = (
             MSIStatus.MSI_HIGH
             if msi_prob >= self.cfg.msi_threshold
             else MSIStatus.MSS
         )
 
-        # Lauren classification
-        lauren_probs = self._predict_lauren(features)
-        lauren_class = max(lauren_probs, key=lauren_probs.get)  # type: ignore[arg-type]
         lauren_map = {
             "intestinal": LaurenClassification.INTESTINAL,
             "diffuse": LaurenClassification.DIFFUSE,
@@ -78,7 +129,6 @@ class MolecularPredictionAgent:
         }
 
         # HER2
-        her2_prob = self._predict_her2(features, lauren_class)
         if her2_prob >= self.cfg.her2_threshold + 0.15:
             her2_status = HER2Status.POSITIVE
         elif her2_prob >= self.cfg.her2_threshold - 0.10:
@@ -87,7 +137,6 @@ class MolecularPredictionAgent:
             her2_status = HER2Status.NEGATIVE
 
         # EBV
-        ebv_prob = self._predict_ebv(til, features)
         ebv_status = (
             EBVStatus.POSITIVE
             if ebv_prob >= self.cfg.ebv_threshold
@@ -146,67 +195,3 @@ class MolecularPredictionAgent:
             "patch_count": len(patches),
             "mean_vector": mean_vector,
         }
-
-    def _predict_msi(self, til: float, features: dict) -> float:
-        """
-        MSI probability from TIL density + importance features.
-        """
-        if self.encoder is not None and not getattr(self.encoder, "mock_mode", True) and features.get("mean_vector"):
-            # Real: linear classifier on aggregated features
-            # Mock linear weights for demonstration
-            v = features["mean_vector"]
-            logit = sum(x * 1.5 for x in v[:10]) + til * 3.5 - 1.0
-            return round(_sigmoid(logit), 4)
-            
-        logit = 3.5 * til - 1.0 + self._rng.gauss(0, 0.3)
-        return round(_sigmoid(logit), 4)
-
-    def _predict_lauren(self, features: dict) -> dict[str, float]:
-        """
-        Lauren classification probability distribution.
-        """
-        if self.encoder is not None and not getattr(self.encoder, "mock_mode", True) and features.get("mean_vector"):
-            v = features["mean_vector"]
-            # Mock multiclass linear output
-            logits = {
-                "intestinal": sum(x * 1.2 for x in v[10:20]) + 0.5,
-                "diffuse": sum(x * 1.2 for x in v[20:30]),
-                "mixed": sum(x * 1.2 for x in v[30:40]) - 0.5,
-            }
-            # Softmax
-            exp_logits = {k: math.exp(val) for k, val in logits.items()}
-            total = sum(exp_logits.values())
-            return {k: round(v / total, 4) for k, v in exp_logits.items()}
-            
-        base = {"intestinal": 0.55, "diffuse": 0.30, "mixed": 0.15}
-        noisy = {k: max(0.01, v + self._rng.gauss(0, 0.08)) for k, v in base.items()}
-        total = sum(noisy.values())
-        return {k: round(v / total, 4) for k, v in noisy.items()}
-
-    def _predict_her2(self, features: dict, lauren_class: str) -> float:
-        """
-        HER2 positivity probability.
-        """
-        base = 0.15 if lauren_class == "intestinal" else 0.07
-        
-        if self.encoder is not None and not getattr(self.encoder, "mock_mode", True) and features.get("mean_vector"):
-            v = features["mean_vector"]
-            logit = sum(x * 2.0 for x in v[40:50]) - 2.0
-            score = _sigmoid(logit)
-            return round((score + base) / 2.0, 4)
-            
-        return round(max(0.0, min(1.0, base + self._rng.gauss(0, 0.05))), 4)
-
-    def _predict_ebv(self, til: float, features: dict) -> float:
-        """
-        EBV probability (~10% of gastric cancers).
-        """
-        base = 0.10 + til * 0.15
-        
-        if self.encoder is not None and not getattr(self.encoder, "mock_mode", True) and features.get("mean_vector"):
-            v = features["mean_vector"]
-            logit = sum(x * 2.0 for x in v[50:60]) - 2.0
-            score = _sigmoid(logit)
-            return round((score + base) / 2.0, 4)
-            
-        return round(max(0.0, min(1.0, base + self._rng.gauss(0, 0.04))), 4)

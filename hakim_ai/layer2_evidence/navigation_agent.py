@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import math
 import random
-from typing import List, Tuple
+from typing import Any, List, Tuple
+import os
 
 from hakim_ai.config import NavigationConfig
 from hakim_ai.foundation_models.base_encoder import BaseEncoder
+from hakim_ai.models.abmil import GatedAttentionMIL
 from hakim_ai.types import (
     NavigationResult,
     PatchCoordinate,
@@ -46,10 +48,25 @@ class NavigationAgent:
     Outputs: NavigationResult
     """
 
-    def __init__(self, cfg: NavigationConfig, encoder: BaseEncoder, seed: int = 42):
+    def __init__(self, cfg: NavigationConfig, encoder: BaseEncoder, seed: int = 42, normalizer: Any = None):
         self.cfg = cfg
         self.encoder = encoder
+        self.normalizer = normalizer
         self._rng = random.Random(seed)
+        
+        # Load ABMIL model for importance scoring
+        self.abmil = None
+        try:
+                import torch
+                self.device = torch.device("cuda" if torch.cuda.is_available() and getattr(encoder, "use_gpu", False) else "cpu")
+                self.abmil = GatedAttentionMIL(input_dim=encoder.embedding_dim).to(self.device)
+                ckpt_path = "checkpoints/abmil_multi_task.pt"
+                if os.path.exists(ckpt_path):
+                    state = torch.load(ckpt_path, map_location=self.device, weights_only=True)
+                    if 'mil' in state:
+                        self.abmil.load_state_dict(state['mil'])
+            except Exception as e:
+                logger.warning(f"Could not load ABMIL model: {e}")
 
     def run(self, wsi_data: WSIData, qc_result: QCResult) -> NavigationResult:
         logger.info("Navigation started for patient %s", wsi_data.patient_id)
@@ -70,9 +87,14 @@ class NavigationAgent:
             except Exception:
                 pass
                 
+        try:
+            import torch
+        except ImportError:
+            pass
+        # 1. Gather all patches and extract features
+        extracted_patches = []
         for mag in self.cfg.magnification_levels:
             level = _MAG_TO_LEVEL.get(mag, 1)
-            # Ensure level is within bounds
             level = min(level, wsi_data.level_count - 1)
             
             coords = extract_patch_coordinates(
@@ -83,17 +105,42 @@ class NavigationAgent:
                 seed=self._rng.randint(0, 10_000),
             )
             for x, y in coords:
-                score, feat = self._compute_importance(wsi_data, x, y, level)
-                patch = PatchCoordinate(
-                    x=x, y=y,
-                    level=level,
-                    width=self.cfg.patch_size,
-                    height=self.cfg.patch_size,
-                    importance_score=score,
-                    label=self._label_region(score),
+                patch = extract_patch_from_wsi(
+                    wsi_path=wsi_data.wsi_path, x=x, y=y, level=level,
+                    size=(self.cfg.patch_size, self.cfg.patch_size),
+                    slide_handle=getattr(wsi_data, "slide_handle", None),
+                    normalizer=self.normalizer,
                 )
-                patch.feature_vector = feat
-                all_patches.append(patch)
+                try:
+                    feat = self.encoder.encode_patch(patch)
+                except Exception:
+                    feat = [0.0] * self.encoder.embedding_dim
+                extracted_patches.append({
+                    "x": x, "y": y, "level": level, "feat": feat
+                })
+        # 2. Score patches using ABMIL
+        if self.abmil is None:
+            raise RuntimeError("ABMIL model is missing, cannot score patches.")
+            
+        with torch.no_grad():
+                # features: (1, N, D)
+                feats_t = torch.tensor([p["feat"] for p in extracted_patches], dtype=torch.float32).unsqueeze(0).to(self.device)
+                _, attn = self.abmil(feats_t)
+                # Normalize attention to [0, 1] range for importance scores
+                attn_scores = attn.squeeze(0)
+                if len(attn_scores) > 0:
+                    attn_scores = (attn_scores - attn_scores.min()) / (attn_scores.max() - attn_scores.min() + 1e-8)
+                attn_scores = attn_scores.cpu().numpy()
+                
+            for p, score in zip(extracted_patches, attn_scores):
+                score = round(float(score), 4)
+                patch_obj = PatchCoordinate(
+                    x=p["x"], y=p["y"], level=p["level"],
+                    width=self.cfg.patch_size, height=self.cfg.patch_size,
+                    importance_score=score, label=self._label_region(score)
+                )
+                patch_obj.feature_vector = p["feat"]
+                all_patches.append(patch_obj)
 
         # Sort by importance, keep top_k
         all_patches.sort(key=lambda p: p.importance_score, reverse=True)
@@ -122,39 +169,6 @@ class NavigationAgent:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-
-    def _compute_importance(
-        self, wsi_data: WSIData, x: int, y: int, level: int
-    ) -> tuple[float, List[float]]:
-        """
-        Compute per-patch importance score.
-
-        Real: encode patch with UNI 2 → linear probe for cancer/importance.
-        Mock: use coordinate hash + Gaussian noise for determinism.
-        """
-        if getattr(self.encoder, "mock_mode", True):
-            seed_val = hash((wsi_data.patient_id, x, y, level)) & 0xFFFFFFFF
-            self._rng.seed(seed_val)
-            base = self._rng.betavariate(2.0, 1.5)
-            # Create a mock vector
-            feat = self.encoder.encode_patch(None)
-            return round(min(1.0, max(0.0, base)), 4), feat
-
-        patch = extract_patch_from_wsi(
-            wsi_path=wsi_data.wsi_path,
-            x=x, y=y, level=level,
-            size=(self.cfg.patch_size, self.cfg.patch_size),
-            slide_handle=getattr(wsi_data, "slide_handle", None)
-        )
-        
-        try:
-            feat = self.encoder.encode_patch(patch)
-            # Mock linear probe on the extracted feature vector
-            # Real implementation would have an ABMIL attention head or prototype similarity
-            score = sum(f * 0.5 for f in feat[:20]) + 0.5
-            return round(min(1.0, max(0.0, score)), 4), feat
-        except Exception:
-            return 0.5, [0.0] * self.encoder.embedding_dim
 
     def _label_region(self, score: float) -> str:
         if score >= 0.75:

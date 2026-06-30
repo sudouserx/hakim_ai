@@ -59,7 +59,10 @@ class KnowledgeRetrievalAgent:
 
     def __init__(self, cfg: RAGConfig, store: RAGStore | None = None):
         self.cfg = cfg
-        self.store = store or RAGStore()
+        if store is None:
+            kb_path = cfg.knowledge_base_path if hasattr(cfg, "knowledge_base_path") and cfg.knowledge_base_path else "data/knowledge_base.json"
+            store = RAGStore(knowledge_base_path=kb_path)
+        self.store = store
 
     def run(
         self, molecular: MolecularPrediction, evidence: EvidenceBundle

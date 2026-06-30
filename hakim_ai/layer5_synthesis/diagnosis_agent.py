@@ -32,19 +32,7 @@ from hakim_ai.utils.logging_utils import get_logger
 logger = get_logger("layer5.diagnosis")
 
 
-def _grade_from_morphology(evidence: EvidenceBundle) -> Optional[str]:
-    """Infer histological grade from patch description narratives."""
-    narratives = " ".join(d.narrative.lower() for d in evidence.descriptions)
-    if "poorly differentiated" in narratives or "poor differentiation" in narratives:
-        return "poorly differentiated (Grade 3)"
-    if "moderately differentiated" in narratives or "moderate differentiation" in narratives:
-        return "moderately differentiated (Grade 2)"
-    if "well differentiated" in narratives or "well-differentiated" in narratives:
-        return "well differentiated (Grade 1)"
-    # Fall back to TIL + tumour fraction heuristic
-    if evidence.segmentation.tumour_fraction > 0.55:
-        return "moderately to poorly differentiated (Grade 2-3)"
-    return "indeterminate grade (IHC recommended)"
+
 
 
 def _build_primary_diagnosis(
@@ -92,6 +80,16 @@ class DiagnosisAgent:
     Outputs: Diagnosis
     """
 
+    def __init__(self, use_gpu: bool = True):
+        try:
+            import torch
+            from hakim_ai.models.grade_classifier import HistologicalGradeClassifier
+            self.device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
+            self.grade_model = HistologicalGradeClassifier.load_model("checkpoints/grade_classifier.pt", device=self.device)
+        except ImportError:
+            self.grade_model = None
+            self.device = None
+
     def run(
         self,
         evidence: EvidenceBundle,
@@ -101,7 +99,7 @@ class DiagnosisAgent:
     ) -> Diagnosis:
         logger.info("Diagnosis synthesis started")
 
-        grade = _grade_from_morphology(evidence)
+        grade = self._grade_from_morphology(evidence)
         who_suggested = verification.who_validation.suggested_classification
         primary = _build_primary_diagnosis(fusion, who_suggested)
         differentials = _build_differentials(fusion, evidence)
@@ -131,6 +129,25 @@ class DiagnosisAgent:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _grade_from_morphology(self, evidence: EvidenceBundle) -> Optional[str]:
+        """Infer histological grade from patch description narratives or ML model."""
+        narratives = " ".join(d.narrative.lower() for d in evidence.descriptions)
+        if "poorly differentiated" in narratives or "poor differentiation" in narratives:
+            return "poorly differentiated (Grade 3)"
+        if "moderately differentiated" in narratives or "moderate differentiation" in narratives:
+            return "moderately differentiated (Grade 2)"
+        if "well differentiated" in narratives or "well-differentiated" in narratives:
+            return "well differentiated (Grade 1)"
+            
+        if self.grade_model is not None and evidence.navigation.selected_patches:
+            import numpy as np
+            features = [p.feature_vector for p in evidence.navigation.selected_patches if getattr(p, "feature_vector", None) is not None]
+            if features:
+                mean_feat = np.mean(features, axis=0).tolist()
+                return self.grade_model.predict_grade(mean_feat, self.device)
+                
+        return "indeterminate grade (IHC recommended)"
 
     def _collect_supporting_findings(
         self, evidence: EvidenceBundle, fusion: FusionResult

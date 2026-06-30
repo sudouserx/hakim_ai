@@ -8,20 +8,18 @@ from hakim_ai.config import FoundationModelConfig
 def build_patch_encoder(cfg: FoundationModelConfig) -> BaseEncoder:
     """Factory: return the configured patch encoder."""
     name = cfg.patch_encoder.lower()
-    mock = cfg.mock_mode
     if name in ("uni2", "uni"):
-        return UNI2Encoder(mock_mode=mock)
+        return UNI2Encoder()
     if name in ("conch", "titan"):
-        return CONCHEncoder(mock_mode=mock)
+        return CONCHEncoder()
     raise ValueError(f"Unknown patch encoder: {cfg.patch_encoder}")
 
 
 def build_vlm(cfg: FoundationModelConfig) -> BaseVLM:
     """Factory: return the configured VLM."""
     name = cfg.vlm.lower()
-    mock = cfg.mock_mode
     if name == "pathchat":
-        return PathChatVLM(mock_mode=mock)
+        return PathChatVLM()
     raise ValueError(f"Unknown VLM: {cfg.vlm}")
 
 

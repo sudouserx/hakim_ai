@@ -26,6 +26,7 @@ from hakim_ai.types import (
     FusionResult,
     LaurenClassification,
     LogicCheckResult,
+    MSIStatus,
     VerificationResult,
     WHOValidationResult,
 )
@@ -169,6 +170,20 @@ def _estimate_raw_confidence(fusion: FusionResult, evidence: EvidenceBundle) -> 
     return sum(signals) / len(signals)
 
 
+def _check_biomarker_correlation(fusion: FusionResult) -> Optional[str]:
+    """Flag biologically implausible biomarker co-occurrences."""
+    mol = fusion.molecular
+    # MSI-H and EBV are mutually exclusive TCGA subtypes
+    if mol.msi_probability > 0.7 and mol.ebv_probability > 0.7:
+        return "msi_ebv_mutual_exclusion"
+    # GS (genomically stable) subtype: typically diffuse Lauren, MSS, HER2-
+    if (mol.lauren_class == LaurenClassification.DIFFUSE
+        and mol.msi_status == MSIStatus.MSI_HIGH
+        and mol.lauren_confidence > 0.8):
+        return "diffuse_msi_h_rare_combination"
+    return None
+
+
 def _detect_ood(fusion: FusionResult, evidence: EvidenceBundle, temperature: float = 1.0, threshold: float = 0.25) -> Tuple[bool, Optional[str]]:
     """
     Lightweight OOD detection.
@@ -180,6 +195,11 @@ def _detect_ood(fusion: FusionResult, evidence: EvidenceBundle, temperature: flo
     if evidence.navigation.top_patch_count < 3:
         return True, "insufficient_tissue"
         
+    # Check for biologically implausible biomarker correlations
+    correlation_issue = _check_biomarker_correlation(fusion)
+    if correlation_issue:
+        return True, correlation_issue
+
     # Energy-based OOD for independent binary classifiers
     # Symmetric logits: [l/2, -l/2]
     mol = fusion.molecular

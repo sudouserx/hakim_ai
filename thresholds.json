@@ -1,0 +1,8 @@
+{
+    "msi_threshold": 0.53,
+    "msi_nll": 0.35,
+    "ebv_threshold": 0.48,
+    "ebv_nll": 0.4,
+    "her2_threshold": 0.5,
+    "ood_threshold": 0.25
+}

@@ -4,11 +4,7 @@ UNI 2 patch encoder adapter.
 Real implementation: load ViT-H weights from Hugging Face (MahmoodLab/UNI2-h)
 and forward patches through the encoder.
 
-Mock implementation: returns a deterministic pseudo-random vector derived
-from a hash of the patch position so tests are reproducible.
-
-Swap by setting config.foundation_models.mock_mode = False and providing
-the HF token via environment variable HF_TOKEN.
+Swap by providing the HF token via environment variable HF_TOKEN.
 """
 from __future__ import annotations
 
@@ -20,39 +16,19 @@ from typing import Any, List
 from hakim_ai.foundation_models.base_encoder import BaseEncoder
 
 
-def _hash_to_vector(seed: str, dim: int) -> List[float]:
-    """Deterministic pseudo-random unit vector from a string seed."""
-    digest = hashlib.sha256(seed.encode()).digest()
-    # Repeat digest until we have enough bytes
-    raw = bytearray()
-    counter = 0
-    while len(raw) < dim * 4:
-        raw.extend(hashlib.sha256(f"{seed}:{counter}".encode()).digest())
-        counter += 1
-    floats = []
-    for i in range(dim):
-        # Map 4 bytes to a float in [-1, 1]
-        b = raw[i * 4: i * 4 + 4]
-        val = int.from_bytes(b, "big") / (2**32 - 1) * 2 - 1
-        floats.append(val)
-    # L2-normalise
-    norm = math.sqrt(sum(v * v for v in floats)) or 1.0
-    return [v / norm for v in floats]
+
 
 
 class UNI2Encoder(BaseEncoder):
     """
     Adapter for the UNI 2 ViT-H patch encoder.
 
-    In mock_mode the encoder returns deterministic 1536-dim vectors.
-    When mock_mode=False it attempts to load real weights (requires
-    torch + transformers + valid HF_TOKEN).
+    Attempts to load real weights (requires torch + transformers + valid HF_TOKEN).
     """
 
     EMBEDDING_DIM = 1536   # ViT-H output dimension for UNI 2
 
-    def __init__(self, mock_mode: bool = True, device: str = None):
-        self.mock_mode = mock_mode
+    def __init__(self, device: str = None):
         if device is None:
             try:
                 import torch
@@ -68,7 +44,7 @@ class UNI2Encoder(BaseEncoder):
         return self.EMBEDDING_DIM
 
     def load(self) -> None:
-        if not self.mock_mode and self._model is None:
+        if self._model is None:
             self._load_real_model()
 
     def unload(self) -> None:
@@ -85,18 +61,7 @@ class UNI2Encoder(BaseEncoder):
     # Public API
     # ------------------------------------------------------------------
 
-    def encode_patch(self, patch: Any) -> List[float]:
-        if self.mock_mode:
-            if patch is None:
-                seed = "null"
-            else:
-                try:
-                    # Content-based hashing if it's an image
-                    import numpy as np
-                    seed = str(hash(np.array(patch).tobytes()))
-                except Exception:
-                    seed = str(id(patch))
-            return _hash_to_vector(seed, self.EMBEDDING_DIM)
+    def _encode_patch(self, patch: Any) -> List[float]:
         return self._real_encode_patch(patch)
 
     # ------------------------------------------------------------------
@@ -169,9 +134,7 @@ class UNI2Encoder(BaseEncoder):
                 
         return feat.squeeze(0).cpu().tolist()
         
-    def encode_batch(self, patches: List[Any]) -> List[List[float]]:
-        if self.mock_mode:
-            return [self.encode_patch(p) for p in patches]
+    def _encode_batch(self, patches: List[Any]) -> List[List[float]]:
             
         import torch
         if not patches:

@@ -1,8 +1,7 @@
 """
 Layer 0 — WSI and clinical data loaders.
 
-MockWSILoader: returns plausible synthetic WSIData without needing
-any real slide file on disk. Suitable for CI/CD and unit tests.
+MockWSILoader: removed. Using real WSI loader.
 
 OpenSlideWSILoader: real implementation using openslide-python.
 Install: pip install openslide-python (also requires the C library).
@@ -35,46 +34,6 @@ class BaseWSILoader(abc.ABC):
 # Mock loader (no dependencies; deterministic)
 # ---------------------------------------------------------------------------
 
-_MOCK_DIMENSIONS = [(65536, 49152), (32768, 24576), (16384, 12288), (4096, 3072)]
-
-
-class MockWSILoader(BaseWSILoader):
-    """
-    Returns synthetic WSIData for testing and development.
-    No real file I/O is performed.
-    """
-
-    def __init__(self, seed: int = 42):
-        self._rng = random.Random(seed)
-
-    def load(self, wsi_input: WSIInput) -> WSIData:
-        logger.debug("MockWSILoader: loading %s", wsi_input.wsi_path)
-        # Generate a plausible 16×16 thumbnail (values 0–255)
-        thumbnail = [
-            [
-                [
-                    int(220 + self._rng.gauss(0, 15)) % 255,
-                    int(190 + self._rng.gauss(0, 15)) % 255,
-                    int(210 + self._rng.gauss(0, 15)) % 255,
-                ]
-                for _ in range(16)
-            ]
-            for _ in range(16)
-        ]
-        return WSIData(
-            patient_id=wsi_input.patient_id,
-            wsi_path=wsi_input.wsi_path,
-            thumbnail=thumbnail,
-            tile_paths=[],   # no real tiles; downstream agents use coords only
-            level_dimensions=list(_MOCK_DIMENSIONS),
-            level_count=len(_MOCK_DIMENSIONS),
-            mpp=0.25,
-            metadata={
-                "scanner": wsi_input.scanner_model or "mock_scanner",
-                "magnification": wsi_input.magnification,
-                **wsi_input.scan_metadata,
-            },
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +128,6 @@ class ClinicalLoader:
         )
 
 
-def build_wsi_loader(mock_mode: bool = True) -> BaseWSILoader:
-    """Factory: return Mock or real loader based on config."""
-    return MockWSILoader() if mock_mode else OpenSlideWSILoader()
+def build_wsi_loader() -> BaseWSILoader:
+    """Factory: return real OpenSlide loader."""
+    return OpenSlideWSILoader()

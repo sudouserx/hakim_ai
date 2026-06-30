@@ -10,8 +10,7 @@ The router is a lightweight fast classifier that gates the expensive
 multi-agent pipeline. It uses patch-level feature statistics from the
 encoder plus QC metadata.
 
-Mock implementation: uses QC scores + a seeded RNG to generate plausible
-routing decisions; a real implementation would use a fine-tuned ViT-S or
+Real implementation: uses a fine-tuned ViT-S or
 a CONCH zero-shot classifier.
 """
 from __future__ import annotations
@@ -46,34 +45,75 @@ class RouterAgent:
         self.cfg = cfg
         self.encoder = encoder
         self._rng = random.Random(seed)
+        
+        self.router_model = None
+        if encoder is not None:
+            try:
+                import torch
+                from hakim_ai.training.train_router import RouterClassifier
+                import os
+                
+                self.device = torch.device("cuda" if torch.cuda.is_available() and getattr(encoder, "use_gpu", False) else "cpu")
+                self.router_model = RouterClassifier(input_dim=encoder.embedding_dim).to(self.device)
+                ckpt_path = "checkpoints/router_head.pt"
+                if os.path.exists(ckpt_path):
+                    self.router_model.load_state_dict(torch.load(ckpt_path, map_location=self.device, weights_only=True))
+                self.router_model.eval()
+            except ImportError:
+                logger.warning("Torch not available; router model disabled.")
+            except Exception as e:
+                logger.warning(f"Could not load router model: {e}")
 
     def run(self, wsi_data: WSIData, qc_result: QCResult) -> RouterDecision:
         logger.info("Router started for patient %s", wsi_data.patient_id)
 
         # In a real system: run a lightweight patch encoder + MIL aggregator
-        if self.encoder is not None and not getattr(self.encoder, "mock_mode", True) and wsi_data.thumbnail is not None:
-            # Simple feature-based classification on the thumbnail
+        if self.router_model is not None and wsi_data.thumbnail is not None:
+            # Mean-pool features from thumbnail patches
             import numpy as np
             from PIL import Image
+            
             thumb_np = np.array(wsi_data.thumbnail, dtype=np.uint8)
-            patch_array = thumb_np[:224, :224] if thumb_np.shape[0] >= 224 and thumb_np.shape[1] >= 224 else thumb_np
-            patch = Image.fromarray(patch_array)
+            h, w = thumb_np.shape[:2]
+            patch_size = 224
+            patches = []
+            
+            for y in range(0, h, patch_size):
+                for x in range(0, w, patch_size):
+                    patch_array = thumb_np[y:y+patch_size, x:x+patch_size]
+                    if patch_array.shape[0] == patch_size and patch_array.shape[1] == patch_size:
+                        patches.append(Image.fromarray(patch_array))
+                        
+            if not patches:
+                patches.append(Image.fromarray(thumb_np).resize((224, 224)))
             
             try:
-                # Real feature extraction
-                feat = self.encoder.encode_patch(patch)
+                import torch
+                # Real feature extraction (batch)
+                feats = self.encoder.encode_batch(patches)
+                mean_feat = np.mean(feats, axis=0)
                 
-                # Mock linear probe on the extracted feature vector
-                # Real implementation would have a trained linear layer here
-                score = sum(f * 0.5 for f in feat[:10]) + 0.5 
-                confidence = min(1.0, max(0.0, score + qc_result.coverage_score * 0.2))
+                with torch.no_grad():
+                    feat_t = torch.tensor(mean_feat, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    logits = self.router_model(feat_t)
+                    probs = torch.softmax(logits, dim=-1).squeeze().tolist()
+                    
+                # Classes: 0=Benign, 1=Suspicious, 2=Malignant
+                class_idx = max(range(3), key=lambda i: probs[i])
+                label_confidence = round(probs[class_idx], 4)
+                
+                if class_idx == 0:
+                    label = DiagnosticLabel.BENIGN
+                elif class_idx == 1:
+                    label = DiagnosticLabel.SUSPICIOUS
+                else:
+                    label = DiagnosticLabel.MALIGNANT
             except Exception as e:
-                logger.warning(f"Encoder routing failed, falling back to heuristic: {e}")
-                confidence = self._heuristic_confidence(qc_result)
+                logger.error(f"Encoder routing failed: {e}")
+                raise RuntimeError(f"Router model inference failed: {e}")
         else:
-            confidence = self._heuristic_confidence(qc_result)
+            raise RuntimeError("Router model or thumbnail is not available for real inference.")
 
-        label, label_confidence = self._classify(confidence)
         complexity = self._assess_complexity(label_confidence, qc_result)
         task_type = self._assign_task(label)
         escalate = self._should_escalate(label_confidence)
@@ -102,40 +142,6 @@ class RouterAgent:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _heuristic_confidence(self, qc_result: QCResult) -> float:
-        base_confidence = (
-            qc_result.stain_quality_score * 0.3
-            + qc_result.focus_quality_score * 0.3
-            + qc_result.coverage_score * 0.4
-        )
-        return min(1.0, max(0.0, base_confidence + self._rng.gauss(0, 0.05)))
-
-    def _classify(
-        self, raw_score: float
-    ) -> tuple[DiagnosticLabel, float]:
-        """
-        Map a continuous score to a diagnostic label with calibrated confidence.
-
-        Real implementation: softmax over [benign, suspicious, malignant] logits
-        from a fine-tuned ViT-S or ABMIL model.
-        """
-        # Mock: treat raw_score as a combined quality/pathology signal
-        # High quality slides from a cancer cohort are more likely malignant
-        p_malignant = 0.60 + self._rng.gauss(0, 0.10)
-        p_suspicious = 0.25 + self._rng.gauss(0, 0.05)
-        p_benign = 1.0 - p_malignant - p_suspicious
-
-        p_benign = max(0.0, p_benign)
-        total = p_malignant + p_suspicious + p_benign
-        p_malignant /= total
-        p_suspicious /= total
-        p_benign /= total
-
-        if p_malignant >= p_suspicious and p_malignant >= p_benign:
-            return DiagnosticLabel.MALIGNANT, round(p_malignant, 3)
-        if p_suspicious >= p_benign:
-            return DiagnosticLabel.SUSPICIOUS, round(p_suspicious, 3)
-        return DiagnosticLabel.BENIGN, round(p_benign, 3)
 
     def _assess_complexity(
         self, confidence: float, qc: QCResult

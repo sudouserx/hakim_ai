@@ -104,6 +104,15 @@ class PipelineInput:
     run_id: Optional[str] = None
 
 
+@dataclass
+class MultiSlideInput:
+    """Container for multiple WSIs belonging to the same patient (e.g. longitudinal biopsies)."""
+    wsi_inputs: List[WSIInput]
+    clinical_input: Optional[ClinicalInput] = None
+    radiology_paths: List[str] = field(default_factory=list)
+    run_id: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Internal WSI representation (passed between layer 0 agents)
 # ---------------------------------------------------------------------------
@@ -366,5 +375,19 @@ class PipelineResult:
     def is_successful(self) -> bool:
         return self.error is None and self.report is not None
 
+    def to_dict(self) -> Dict[str, Any]:
+        return dataclasses.asdict(self)
+
+
+@dataclass
+class MultiSlideResult:
+    """Output for a multi-slide analysis (e.g. longitudinal trajectory)."""
+    patient_id: str
+    run_id: Optional[str]
+    slide_results: List[PipelineResult]
+    longitudinal_summary: Optional[str] = None
+    trajectory_prediction: Optional[Dict[str, float]] = None
+    error: Optional[str] = None
+    
     def to_dict(self) -> Dict[str, Any]:
         return dataclasses.asdict(self)

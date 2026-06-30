@@ -2,18 +2,16 @@
 CONCH / TITAN slide-level vision-language encoder adapter and
 PathChat VLM adapter for natural-language patch descriptions.
 
-Mock implementations return templated but contextually plausible text
-and deterministic feature vectors so the full pipeline is testable
-without GPU or model weights.
+Real implementations requiring valid HF_TOKEN, torch, and transformers.
 """
 from __future__ import annotations
 
 import math
 import random
+import os
 from typing import Any, List, Optional
 
 from hakim_ai.foundation_models.base_encoder import BaseEncoder, BaseVLM
-from hakim_ai.foundation_models.uni_adapter import _hash_to_vector
 
 
 # ---------------------------------------------------------------------------
@@ -28,8 +26,7 @@ class CONCHEncoder(BaseEncoder):
 
     EMBEDDING_DIM = 512
 
-    def __init__(self, mock_mode: bool = True, model_variant: str = "conch"):
-        self.mock_mode = mock_mode
+    def __init__(self, model_variant: str = "conch"):
         self.model_variant = model_variant
         self._model = None
 
@@ -38,7 +35,7 @@ class CONCHEncoder(BaseEncoder):
         return self.EMBEDDING_DIM
 
     def load(self) -> None:
-        if not self.mock_mode and self._model is None:
+        if self._model is None:
             self._load_real_model()
 
     def unload(self) -> None:
@@ -51,18 +48,7 @@ class CONCHEncoder(BaseEncoder):
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-    def encode_patch(self, patch: Any) -> List[float]:
-        if self.mock_mode:
-            if patch is None:
-                seed = "null"
-            else:
-                try:
-                    import numpy as np
-                    seed = str(hash(np.array(patch).tobytes()))
-                except Exception:
-                    seed = str(id(patch)) + self.model_variant
-            return _hash_to_vector(seed, self.EMBEDDING_DIM)
-            
+    def _encode_patch(self, patch: Any) -> List[float]:
         import torch
         if patch is None:
             return [0.0] * self.EMBEDDING_DIM
@@ -77,10 +63,7 @@ class CONCHEncoder(BaseEncoder):
                 feat = torch.nn.functional.normalize(feat, p=2, dim=-1)
         return feat.squeeze(0).cpu().tolist()
 
-    def encode_batch(self, patches: List[Any]) -> List[List[float]]:
-        if self.mock_mode:
-            return [self.encode_patch(p) for p in patches]
-            
+    def _encode_batch(self, patches: List[Any]) -> List[List[float]]:
         import torch
         valid_patches = [p for p in patches if p is not None]
         if not valid_patches:
@@ -112,9 +95,6 @@ class CONCHEncoder(BaseEncoder):
 
     def encode_text(self, text: str) -> List[float]:
         """Return a text embedding for zero-shot tasks."""
-        if self.mock_mode:
-            return _hash_to_vector(text, self.EMBEDDING_DIM)
-            
         import torch
         if not hasattr(self, "_tokenizer") or self._tokenizer is None:
             return [0.0] * self.EMBEDDING_DIM
@@ -126,7 +106,7 @@ class CONCHEncoder(BaseEncoder):
             if hasattr(self._model, "encode_text"):
                 feat = self._model.encode_text(inputs["input_ids"], inputs["attention_mask"])
             else:
-                return _hash_to_vector(text, self.EMBEDDING_DIM)
+                return [0.0] * self.EMBEDDING_DIM
                 
             feat = torch.nn.functional.normalize(feat, p=2, dim=-1)
         return feat.squeeze(0).cpu().tolist()
@@ -143,7 +123,6 @@ class CONCHEncoder(BaseEncoder):
                 "Real CONCH requires torch, timm, transformers, and huggingface_hub."
             ) from exc
 
-        import os
         hf_token = os.environ.get("HF_TOKEN")
         if hf_token:
             login(token=hf_token)
@@ -184,62 +163,19 @@ class CONCHEncoder(BaseEncoder):
 # PathChat VLM
 # ---------------------------------------------------------------------------
 
-_DESCRIPTION_TEMPLATES = [
-    (
-        "The patch demonstrates irregular glandular architecture with loss of "
-        "normal mucosal organisation. Nuclei are enlarged with prominent nucleoli "
-        "and increased nuclear-to-cytoplasmic ratio. These features are consistent "
-        "with moderately differentiated gastric adenocarcinoma."
-    ),
-    (
-        "At 20× magnification, this region shows infiltrating tumour cells arranged "
-        "in poorly cohesive clusters with signet-ring cell morphology. Background "
-        "desmoplastic stroma and scattered lymphocytes are noted, raising concern "
-        "for Lauren diffuse-type gastric carcinoma."
-    ),
-    (
-        "The tissue displays well-formed glands lined by columnar epithelium with "
-        "mild nuclear atypia. Goblet cells are present. The architecture is broadly "
-        "intact with only focal irregularity, compatible with intestinal metaplasia "
-        "or well-differentiated intestinal-type adenocarcinoma."
-    ),
-    (
-        "A dense lymphocytic infiltrate surrounds tumour nests at the invasive margin. "
-        "Tumour-infiltrating lymphocyte (TIL) density is high. Nuclear pleomorphism "
-        "is moderate. This pattern of immune infiltration raises the possibility of "
-        "microsatellite instability-high (MSI-H) gastric carcinoma."
-    ),
-    (
-        "This high-power field reveals marked nuclear pleomorphism with atypical "
-        "mitotic figures. No glandular differentiation is apparent. The stroma is "
-        "densely fibrotic. Appearances are consistent with poorly differentiated "
-        "gastric adenocarcinoma."
-    ),
-    (
-        "The lamina propria contains a mixed inflammatory infiltrate. Glands show "
-        "reactive changes without overt dysplasia. H. pylori-associated chronic "
-        "active gastritis cannot be excluded in this region."
-    ),
-]
-
-
 class PathChatVLM(BaseVLM):
     """
     Adapter for PathChat (CONCH vision encoder + LLM).
-
-    Mock: returns contextually appropriate templated descriptions.
-    Real: requires PathChat model weights and GPU.
+    Requires PathChat model weights and GPU.
     """
 
-    def __init__(self, mock_mode: bool = True, seed: int = 42):
-        self.mock_mode = mock_mode
+    def __init__(self, seed: int = 42):
         self._rng = random.Random(seed)
-        self._call_counter = 0
         self._model = None
         self._processor = None
 
     def load(self) -> None:
-        if not self.mock_mode and self._model is None:
+        if self._model is None:
             self._load_real_model()
 
     def unload(self) -> None:
@@ -256,52 +192,10 @@ class PathChatVLM(BaseVLM):
                 torch.cuda.empty_cache()
 
     def describe_patch(self, patch: Any, prompt: str = "") -> str:
-        if self.mock_mode:
-            return self._mock_describe(patch, prompt)
         return self._real_describe(patch, prompt)
 
     def answer_question(self, patch: Any, question: str) -> str:
-        if self.mock_mode:
-            return self._mock_answer(question)
         return self._real_answer(patch, question)
-
-    # ------------------------------------------------------------------
-    # Mock implementations
-    # ------------------------------------------------------------------
-
-    def _mock_describe(self, patch: Any, prompt: str) -> str:
-        idx = self._call_counter % len(_DESCRIPTION_TEMPLATES)
-        self._call_counter += 1
-        return _DESCRIPTION_TEMPLATES[idx]
-
-    def _mock_answer(self, question: str) -> str:
-        q = question.lower()
-        if "msi" in q:
-            return (
-                "The high tumour-infiltrating lymphocyte density and poor glandular "
-                "differentiation in this patch raise the possibility of MSI-H status. "
-                "Confirmatory MMR immunohistochemistry is recommended."
-            )
-        if "lauren" in q:
-            return (
-                "The presence of irregular gland formation and infiltrating tumour "
-                "cells suggests intestinal-type Lauren classification, though mixed "
-                "features are present."
-            )
-        if "her2" in q:
-            return (
-                "No clear membrane staining pattern indicative of HER2 overexpression "
-                "is visible on H&E. IHC testing is required for definitive HER2 scoring."
-            )
-        return (
-            "Based on the histomorphological features visible in this patch, "
-            "further assessment at higher magnification and molecular correlation "
-            "is recommended."
-        )
-
-    # ------------------------------------------------------------------
-    # Real model stubs
-    # ------------------------------------------------------------------
 
     def _load_real_model(self) -> None:
         try:
@@ -313,7 +207,6 @@ class PathChatVLM(BaseVLM):
                 "Real VLM requires torch, transformers (>=4.39.0), and huggingface_hub."
             ) from exc
             
-        import os
         hf_token = os.environ.get("HF_TOKEN")
         if hf_token:
             login(token=hf_token)
@@ -328,7 +221,6 @@ class PathChatVLM(BaseVLM):
                 bnb_4bit_compute_dtype=torch.float16
             )
             
-            # Explicitly load the processor and model mapped to the Mistral architecture
             self._processor = LlavaProcessor.from_pretrained(model_name, use_fast=False)
             self._processor.patch_size = 14
             self._model = LlavaForConditionalGeneration.from_pretrained(
@@ -346,13 +238,13 @@ class PathChatVLM(BaseVLM):
         if self._model is None or self._processor is None:
             self.load()
             if self._model is None:
-                return self._mock_describe(patch, prompt)
+                raise RuntimeError("VLM model failed to load.")
             
         import torch
         if patch is None:
             return "No image provided for description."
             
-        formatted_prompt = f"USER: <image>\n{prompt}\nASSISTANT:"
+        formatted_prompt = f"USER: <image>\\n{prompt}\\nASSISTANT:"
         inputs = self._processor(text=formatted_prompt, images=patch, return_tensors="pt").to(self._model.device)
         
         with torch.no_grad():
@@ -371,13 +263,13 @@ class PathChatVLM(BaseVLM):
         if self._model is None or self._processor is None:
             self.load()
             if self._model is None:
-                return self._mock_answer(question)
+                raise RuntimeError("VLM model failed to load.")
             
         import torch
         if patch is None:
             return "No image provided to answer the question."
             
-        formatted_question = f"USER: <image>\nQuestion: {question}\nASSISTANT: Answer:"
+        formatted_question = f"USER: <image>\\nQuestion: {question}\\nASSISTANT: Answer:"
         inputs = self._processor(text=formatted_question, images=patch, return_tensors="pt").to(self._model.device)
         
         with torch.no_grad():

@@ -162,16 +162,7 @@ def compute_tissue_mask(
     Real implementation: Otsu thresholding on saturation channel.
     """
     if thumbnail is None:
-        # Default 16x16 mock mask with ~80% tissue
-        rng = random.Random(42)
-        return [[rng.random() < tissue_threshold for _ in range(16)] for _ in range(16)]
-    
-    if isinstance(thumbnail, list):
-        # Mock mode fallback
-        rows = len(thumbnail)
-        cols = len(thumbnail[0]) if rows > 0 else 16
-        rng = random.Random(42)
-        return [[rng.random() < tissue_threshold for _ in range(cols)] for _ in range(rows)]
+        raise ValueError("Thumbnail is required to compute tissue mask.")
     
     # Real image (PIL or numpy)
     img = np.array(thumbnail)
@@ -241,32 +232,43 @@ def extract_patch_coordinates(
     return rng.sample(grid_coords, k) if grid_coords else []
 
 
-@functools.lru_cache(maxsize=128)
 def extract_patch_from_wsi(
-    wsi_path: str, x: int, y: int, level: int, size: Tuple[int, int] = (512, 512), slide_handle: Any = None
+    wsi_path: str, x: int, y: int, level: int, size: Tuple[int, int] = (512, 512),
+    slide_handle: Any = None, normalizer: Any = None
 ) -> Any:
     """
     Extract a patch from the WSI using openslide.
-    Uses LRU cache to avoid re-reading same regions.
+
+    Args:
+        normalizer: Optional stain normalizer instance (e.g. StainNormalizerMacenko).
+                    If provided, the extracted patch is stain-normalized before return.
     """
+    patch = None
     if slide_handle is None:
         if openslide is None:
-            # Return a mock block
-            return [[[(x + y + c) % 255 for c in range(3)] for _ in range(size[0])] for _ in range(size[1])]
-        
+            raise RuntimeError("openslide-python is required to extract patches.")
+
         # Real extraction without handle (opens and closes)
         try:
             with openslide.OpenSlide(wsi_path) as slide:
                 patch = slide.read_region((x, y), level, size).convert("RGB")
-            return patch
-        except Exception as e:
+        except Exception:
             return None
     else:
         # Use provided handle
         try:
-            return slide_handle.read_region((x, y), level, size).convert("RGB")
-        except Exception as e:
+            patch = slide_handle.read_region((x, y), level, size).convert("RGB")
+        except Exception:
             return None
+
+    # Apply stain normalization if a normalizer is provided
+    if patch is not None and normalizer is not None:
+        try:
+            patch = normalizer.normalize_patch(patch)
+        except Exception:
+            pass  # Return un-normalized patch rather than failing
+
+    return patch
 
 
 # ---------------------------------------------------------------------------
@@ -278,8 +280,8 @@ def estimate_focus_quality(patch_array: Optional[Any]) -> float:
     Estimate focus quality using Laplacian variance.
     Real implementation: compute variance of the Laplacian of the grayscale patch.
     """
-    if patch_array is None or isinstance(patch_array, list):
-        return 0.82  # mock
+    if patch_array is None:
+        return 0.0
 
     img = np.array(patch_array)
     if len(img.shape) == 3:
@@ -301,8 +303,8 @@ def estimate_stain_quality(patch_array: Optional[Any]) -> float:
     """
     Estimate H&E stain quality from OD histogram entropy.
     """
-    if patch_array is None or isinstance(patch_array, list):
-        return 0.78  # mock
+    if patch_array is None:
+        return 0.0
         
     img = np.array(patch_array)
     if len(img.shape) < 3 or img.shape[2] < 3:
@@ -327,7 +329,7 @@ def detect_artifacts(patch_array: Optional[Any]) -> List[str]:
     """
     Detect common slide artifacts: tissue folds, pen marks, out-of-focus.
     """
-    if patch_array is None or isinstance(patch_array, list):
+    if patch_array is None:
         return []
         
     artifacts = []

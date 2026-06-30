@@ -32,14 +32,34 @@ class BaseEncoder(abc.ABC):
         """Unload the foundation model weights to free up memory."""
         pass
 
-    @abc.abstractmethod
     def encode_patch(self, patch: Any) -> List[float]:
         """Return a 1-D feature vector for a single patch (PIL Image or np.ndarray)."""
+        feat = self._encode_patch(patch)
+        self._validate_feature(feat)
+        return feat
+
+    def encode_batch(self, patches: List[Any]) -> List[List[float]]:
+        """Return a list of feature vectors for a batch of patches."""
+        feats = self._encode_batch(patches)
+        for f in feats:
+            self._validate_feature(f)
+        return feats
+        
+    def _validate_feature(self, feat: Any) -> None:
+        """Post-condition validation to prevent mock/real drift."""
+        if not isinstance(feat, list):
+            raise TypeError(f"Encoder must return a list of floats, got {type(feat)}")
+        if len(feat) != self.embedding_dim:
+            raise ValueError(f"Encoder returned dimension {len(feat)}, expected {self.embedding_dim}")
+        if len(feat) > 0 and not isinstance(feat[0], float):
+            raise TypeError(f"Encoder elements must be float, got {type(feat[0])}")
+
+    @abc.abstractmethod
+    def _encode_patch(self, patch: Any) -> List[float]:
         ...
 
     @abc.abstractmethod
-    def encode_batch(self, patches: List[Any]) -> List[List[float]]:
-        """Return a list of feature vectors for a batch of patches."""
+    def _encode_batch(self, patches: List[Any]) -> List[List[float]]:
         ...
 
 

@@ -58,7 +58,7 @@ class QCAgent:
         
         # Sample patches from the thumbnail for multi-region QC assessment
         import numpy as np
-        if wsi_data.thumbnail is not None and not isinstance(wsi_data.thumbnail, list):
+        if wsi_data.thumbnail is not None:
             thumb_np = np.array(wsi_data.thumbnail)
             h, w = thumb_np.shape[:2]
             
@@ -79,10 +79,10 @@ class QCAgent:
             focus_score = np.mean(focus_scores) if focus_scores else estimate_focus_quality(wsi_data.thumbnail)
             artifacts = list(set(artifacts))
         else:
-            # Fallback for mock mode or tiny images
-            stain_score = estimate_stain_quality(wsi_data.thumbnail)
-            focus_score = estimate_focus_quality(wsi_data.thumbnail)
-            artifacts = detect_artifacts(wsi_data.thumbnail)
+            # If no thumbnail, use default failsafe
+            stain_score = 0.5
+            focus_score = 0.5
+            artifacts = []
 
         # 3. Artifact detection
         if self.cfg.reject_on_artifact and artifacts:

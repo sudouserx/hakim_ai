@@ -17,7 +17,7 @@ fine-tuned on GCHTID/NCT-CRC-HE-100K.
 from __future__ import annotations
 
 import random
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from hakim_ai.config import SegmentationConfig
 from hakim_ai.types import (
@@ -39,9 +39,24 @@ class SegmentationAgent:
     Outputs: TissueSegmentation
     """
 
-    def __init__(self, cfg: SegmentationConfig, seed: int = 42):
+    def __init__(self, cfg: SegmentationConfig, seed: int = 42, normalizer: Any = None):
         self.cfg = cfg
+        self.normalizer = normalizer
         self._rng = random.Random(seed)
+        
+        self.seg_model = None
+        if cfg.model == "segformer":
+            try:
+                import torch
+                from hakim_ai.foundation_models.segformer_adapter import SegformerAdapter
+                self.seg_model = SegformerAdapter(
+                    checkpoint_path=cfg.checkpoint_path,
+                    num_classes=cfg.num_classes,
+                    use_gpu=torch.cuda.is_available()
+                )
+                self.seg_model.load()
+            except ImportError:
+                logger.warning("Torch not available; segmentation model disabled.")
 
     def run(
         self, wsi_data: WSIData, navigation: NavigationResult
@@ -85,15 +100,26 @@ class SegmentationAgent:
         """
         import numpy as np
         
-        if wsi_data.thumbnail is None or isinstance(wsi_data.thumbnail, list):
-            # Mock fallback
-            seed_val = hash(wsi_data.patient_id) & 0xFFFFFFFF
-            rng = random.Random(seed_val)
-            base = {"tumour": 0.45, "stroma": 0.30, "til": 0.10, "necrosis": 0.05, "normal_gland": 0.08, "background": 0.02}
-            noisy = {k: max(0.0, v + rng.gauss(0, 0.05)) for k, v in base.items()}
-            total = sum(noisy.values())
-            return {k: round(v / total, 4) for k, v in noisy.items()}
+        if wsi_data.thumbnail is None:
+            raise ValueError("Thumbnail is required for segmentation.")
             
+        if self.seg_model is not None:
+            # Use trained segmentation model
+            from PIL import Image
+            thumb_img = Image.fromarray(np.array(wsi_data.thumbnail)) if not isinstance(wsi_data.thumbnail, Image.Image) else wsi_data.thumbnail
+            mask = self.seg_model.segment_patch(thumb_img)
+            
+            total_pixels = mask.size
+            fracs = {
+                "background": float(np.sum(mask == 0)) / total_pixels,
+                "tumour": float(np.sum(mask == 1)) / total_pixels,
+                "stroma": float(np.sum(mask == 2)) / total_pixels,
+                "til": float(np.sum(mask == 3)) / total_pixels,
+                "necrosis": float(np.sum(mask == 4)) / total_pixels,
+                "normal_gland": float(np.sum(mask == 5)) / total_pixels,
+            }
+            return fracs
+
         thumb_np = np.array(wsi_data.thumbnail)
         if len(thumb_np.shape) != 3 or thumb_np.shape[2] < 3:
             return {"tumour": 0.4, "stroma": 0.3, "til": 0.1, "necrosis": 0.1, "normal_gland": 0.1, "background": 0.0}
@@ -167,7 +193,8 @@ class SegmentationAgent:
             if wsi_data is not None:
                 patch = extract_patch_from_wsi(
                     wsi_data.wsi_path, region["x"], region["y"], region.get("level", 0),
-                    size=(256, 256), slide_handle=getattr(wsi_data, "slide_handle", None)
+                    size=(256, 256), slide_handle=getattr(wsi_data, "slide_handle", None),
+                    normalizer=self.normalizer
                 )
                 if patch is not None and not isinstance(patch, list):
                     import matplotlib.colors as colors

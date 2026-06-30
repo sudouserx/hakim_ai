@@ -59,7 +59,7 @@ def run_demo() -> None:
 
     pipeline = HistopathologyPipeline(cfg)
     print("✅ Pipeline initialised with mock foundation models.")
-    print("   (Set config.mock_mode=False + HF_TOKEN to load real weights)")
+    print("   (Ensure HF_TOKEN is set to load real weights)")
 
     # ── Case 1: Full clinical context ───────────────────────────────── #
     section("Step 2: Case 1 — MSI-suspected gastric adenocarcinoma")
@@ -258,7 +258,7 @@ def run_demo() -> None:
     print(f"\n  Next steps to use real models:")
     print(f"    1. pip install 'hakim_ai[models]'")
     print(f"    2. export HF_TOKEN=<your_huggingface_token>")
-    print(f"    3. Set mock_mode: false in config/default.yaml")
+    print(f"    3. Set use_gpu: true in config if you have one")
     print(f"    4. python scripts/run_pipeline.py --wsi-path real_slide.svs --patient-id P001")
 
 

@@ -47,6 +47,7 @@ from hakim_ai.types import (
     PipelineResult,
 )
 from hakim_ai.utils import RAGStore, setup_logging
+from hakim_ai.utils.image_utils import build_normalizer
 from hakim_ai.utils.logging_utils import get_logger
 
 
@@ -73,7 +74,7 @@ class HistopathologyPipeline:
         vlm = build_vlm(cfg.foundation_models)
 
         # Layer 0
-        self.wsi_loader = build_wsi_loader(mock_mode=cfg.mock_mode)
+        self.wsi_loader = build_wsi_loader()
         self.clinical_loader = ClinicalLoader()
         self.qc_agent = QCAgent(cfg.qc)
 
@@ -81,15 +82,21 @@ class HistopathologyPipeline:
         self.router = RouterAgent(cfg.router, encoder)
 
         # Layer 2
-        self.navigation_agent = NavigationAgent(cfg.navigation, encoder)
-        self.segmentation_agent = SegmentationAgent(cfg.segmentation)
-        self.description_agent = DescriptionAgent(cfg.description, vlm)
+        normalizer = build_normalizer(cfg.qc.stain_normalizer) if hasattr(cfg.qc, "stain_normalizer") else None
+        self.navigation_agent = NavigationAgent(cfg.navigation, encoder, normalizer=normalizer)
+        self.segmentation_agent = SegmentationAgent(cfg.segmentation, normalizer=normalizer)
+        self.description_agent = DescriptionAgent(cfg.description, vlm, normalizer=normalizer)
 
         # Layer 3
         from hakim_ai.foundation_models.conch_adapter import CONCHEncoder
-        conch_encoder = CONCHEncoder(mock_mode=cfg.mock_mode)
+        conch_encoder = CONCHEncoder()
         
-        rag_store = RAGStore()
+        if not cfg.rag.knowledge_base_path:
+            # Fallback path if none provided but store is needed
+            kb_path = "data/knowledge_base.json" 
+        else:
+            kb_path = cfg.rag.knowledge_base_path
+        rag_store = RAGStore(knowledge_base_path=kb_path)
         self.molecular_agent = MolecularPredictionAgent(cfg.molecular, conch_encoder)
         self.clinical_context_agent = ClinicalContextAgent(encoder=conch_encoder)
         self.knowledge_agent = KnowledgeRetrievalAgent(cfg.rag, store=rag_store)

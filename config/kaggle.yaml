@@ -1,0 +1,34 @@
+# hakim_ai — Kaggle T4-GPU Configuration
+# Configured to prevent OOM errors on single 16GB VRAM instances.
+
+pipeline_name: histopath_ai_kaggle
+mock_mode: false
+log_level: INFO
+output_dir: /kaggle/working/outputs
+parallel_multi_slide: false   # Must be false to avoid OOM on single GPU
+
+foundation_models:
+  mock_mode: false
+  use_gpu: true
+
+navigation:
+  top_k_patches: 10           # Reduced to save VRAM
+
+description:
+  max_patches_to_describe: 3
+
+verification:
+  calibrated: true
+
+training:
+  batch_size: 16              # Reduced to fit in 16GB VRAM
+  learning_rate: 0.0001
+  num_epochs: 20              # Fewer epochs for Kaggle time limits
+  num_folds: 3
+  device: cuda
+
+ui:
+  output_dir: outputs
+  html_report: true
+  mdt_export: false
+  feedback_db_path: outputs/feedback.jsonl

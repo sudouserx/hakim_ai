@@ -13,7 +13,7 @@ Real: forward selected patches through PathChat or CONCH+GPT-4 Vision.
 """
 from __future__ import annotations
 
-from typing import List
+from typing import Any, List
 
 from hakim_ai.config import DescriptionConfig
 from hakim_ai.foundation_models.base_encoder import BaseVLM
@@ -71,9 +71,10 @@ class DescriptionAgent:
     Outputs: List[PatchDescription]
     """
 
-    def __init__(self, cfg: DescriptionConfig, vlm: BaseVLM):
+    def __init__(self, cfg: DescriptionConfig, vlm: BaseVLM, normalizer: Any = None):
         self.cfg = cfg
         self.vlm = vlm
+        self.normalizer = normalizer
 
     def run(
         self, wsi_data: WSIData, navigation: NavigationResult
@@ -89,17 +90,15 @@ class DescriptionAgent:
 
         for patch_coord in top_patches:
             # Extract the patch image from WSI at these coords
-            if getattr(self.vlm, "mock_mode", True):
-                patch_image = None
-            else:
-                patch_image = extract_patch_from_wsi(
-                    wsi_path=wsi_data.wsi_path,
-                    x=patch_coord.x,
-                    y=patch_coord.y,
-                    level=patch_coord.level,
-                    size=(patch_coord.width, patch_coord.height),
-                    slide_handle=getattr(wsi_data, "slide_handle", None)
-                )
+            patch_image = extract_patch_from_wsi(
+                wsi_path=wsi_data.wsi_path,
+                x=patch_coord.x,
+                y=patch_coord.y,
+                level=patch_coord.level,
+                size=(patch_coord.width, patch_coord.height),
+                slide_handle=getattr(wsi_data, "slide_handle", None),
+                normalizer=self.normalizer,
+            )
 
             narrative = self.vlm.describe_patch(
                 patch=patch_image,
@@ -135,17 +134,15 @@ class DescriptionAgent:
         prompt = _PROMPTS.get(question_key, question_key)
         answers = []
         for patch_coord in navigation.selected_patches[:3]:
-            if getattr(self.vlm, "mock_mode", True):
-                patch_image = None
-            else:
-                patch_image = extract_patch_from_wsi(
-                    wsi_path=wsi_data.wsi_path,
-                    x=patch_coord.x,
-                    y=patch_coord.y,
-                    level=patch_coord.level,
-                    size=(patch_coord.width, patch_coord.height),
-                    slide_handle=getattr(wsi_data, "slide_handle", None)
-                )
+            patch_image = extract_patch_from_wsi(
+                wsi_path=wsi_data.wsi_path,
+                x=patch_coord.x,
+                y=patch_coord.y,
+                level=patch_coord.level,
+                size=(patch_coord.width, patch_coord.height),
+                slide_handle=getattr(wsi_data, "slide_handle", None),
+                normalizer=self.normalizer,
+            )
             answer = self.vlm.answer_question(patch=patch_image, question=prompt)
             answers.append(answer)
         return answers

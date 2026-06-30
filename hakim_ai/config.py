@@ -52,12 +52,15 @@ class NavigationConfig:
     magnification_levels: List[int] = field(default_factory=lambda: [5, 20, 40])
     top_k_patches: int = 20
     patch_size: int = 512
-    encoder_model: str = "uni2_mock"   # "uni2_mock" | "uni2"
+    encoder_model: str = "uni2"   # "uni2"
 
 
 @dataclass
 class SegmentationConfig:
-    model: str = "mock"                # "mock" | "hovernet" | "cellvit"
+    model: str = "segformer"                # "segformer" | "hovernet" | "cellvit"
+    checkpoint_path: str = "checkpoints/segformer_gchtid.pt"
+    num_classes: int = 6
+    patch_size: int = 512
     tissue_classes: List[str] = field(
         default_factory=lambda: [
             "tumour", "stroma", "til", "necrosis", "normal_gland", "background"
@@ -67,17 +70,17 @@ class SegmentationConfig:
 
 @dataclass
 class DescriptionConfig:
-    vlm_model: str = "pathchat_mock"   # "pathchat_mock" | "pathchat" | "conch"
+    vlm_model: str = "pathchat"   # "pathchat" | "conch"
     max_patches_to_describe: int = 5
     max_tokens: int = 256
 
 
 @dataclass
 class MolecularConfig:
-    model: str = "mock"
-    msi_threshold: float = 0.5
+    model: str = "multi_task_head"
+    msi_threshold: float = 0.53
     her2_threshold: float = 0.5
-    ebv_threshold: float = 0.5
+    ebv_threshold: float = 0.48
 
 
 @dataclass
@@ -85,7 +88,7 @@ class RAGConfig:
     knowledge_base_path: Optional[str] = None
     top_k_similar_cases: int = 3
     top_k_guidelines: int = 5
-    embedding_model: str = "mock"      # "mock" | "biomed_bert" | "text-embedding-3"
+    embedding_model: str = "biomed_bert"      # "biomed_bert" | "text-embedding-3"
 
 
 @dataclass
@@ -93,6 +96,23 @@ class VerificationConfig:
     temperature: float = 1.5           # temperature scaling for calibration
     abstention_threshold: float = 0.35
     ood_threshold: float = 0.25
+    calibrated: bool = False
+    calibration_config: Optional[str] = None
+
+
+@dataclass
+class TrainingConfig:
+    tcga_data_root: Optional[str] = "data/tcga-stad/"
+    tcga_feature_dir: Optional[str] = "data/tcga-stad/features/"
+    tcga_manifest_csv: Optional[str] = "data/tcga-stad/manifest.csv"
+    gashis_data_root: Optional[str] = "data/gashis/"
+    gchtid_data_root: Optional[str] = "data/gchtid/"
+    batch_size: int = 32
+    learning_rate: float = 1e-4
+    num_epochs: int = 50
+    num_folds: int = 5
+    checkpoint_dir: str = "checkpoints/"
+    device: str = "auto"
 
 
 @dataclass
@@ -100,8 +120,7 @@ class FoundationModelConfig:
     patch_encoder: str = "uni2"        # "uni2" | "virchow2" | "gigapath"
     slide_encoder: str = "conch"       # "conch" | "titan"
     vlm: str = "pathchat"
-    use_gpu: bool = False
-    mock_mode: bool = True             # True = stubs; False = load real weights
+    use_gpu: bool = True
 
 
 @dataclass
@@ -121,7 +140,6 @@ class PipelineConfig:
     """Root configuration object — single source of truth for all agents."""
     pipeline_name: str = "histopath_ai_gastric"
     version: str = "0.1.0"
-    mock_mode: bool = True
     output_dir: str = "outputs"
     log_level: str = "INFO"
 
@@ -135,6 +153,8 @@ class PipelineConfig:
     verification: VerificationConfig = field(default_factory=VerificationConfig)
     foundation_models: FoundationModelConfig = field(default_factory=FoundationModelConfig)
     ui: UIConfig = field(default_factory=UIConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+    parallel_multi_slide: bool = False
 
     # ------------------------------------------------------------------ #
     # Constructors
@@ -162,6 +182,7 @@ class PipelineConfig:
             "verification": VerificationConfig,
             "foundation_models": FoundationModelConfig,
             "ui": UIConfig,
+            "training": TrainingConfig,
         }
         cfg = cls()
         for key, val in d.items():
@@ -182,8 +203,6 @@ class PipelineConfig:
     @classmethod
     def for_testing(cls) -> "PipelineConfig":
         cfg = cls()
-        cfg.mock_mode = True
-        cfg.foundation_models.mock_mode = True
         cfg.log_level = "WARNING"
         cfg.navigation.top_k_patches = 5
         cfg.description.max_patches_to_describe = 2

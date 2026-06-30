@@ -168,21 +168,9 @@ class ClinicalContextAgent:
                     relevance = float((sim + 1.0) / 2.0)
                     return round(relevance, 4)
 
-            # Fallback mock logic if encoder is missing or it's a mock
-            desc_text = " ".join([d.narrative.lower() for d in evidence.descriptions])
-            prompt_lower = prompt.lower()
-            
-            # Simple keyword matching as a proxy for attention
-            overlap = 0
-            if "msi" in prompt_lower and "lymphocyte" in desc_text:
-                overlap += 1
-            if "poorly differentiated" in prompt_lower and "poorly cohesive" in desc_text:
-                overlap += 1
-            if "h. pylori" in prompt_lower and "intestinal" in desc_text:
-                overlap += 1
-                
-            relevance = 0.5 + min(overlap * 0.15, 0.45)
-            return round(relevance, 4)
+                return 0.5
+
+            raise RuntimeError("Text encoder is not available for cross-modal attention.")
         except Exception as e:
-            logger.warning(f"Cross-modal attention failed: {e}")
+            logger.error(f"Cross-modal attention failed: {e}")
             return 0.5

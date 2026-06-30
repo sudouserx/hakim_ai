@@ -10,7 +10,6 @@
 
 `hakim_ai` implements the layered multi-agent architecture described in the research synthesis document, targeting gastric cancer (stomach adenocarcinoma, STAD) as the primary diagnostic domain. It acts as a comprehensive multimodal pipeline capable of integrating whole-slide images (WSI), clinical electronic health records (EHR), radiology imaging (DICOM), and molecular history.
 
-
 ### Why gastric cancer?
 
 - **3rd in global cancer mortality** (GLOBOCAN 2022) with highest burden in Asia-Pacific
@@ -55,7 +54,7 @@
         └── Feedback Capture   structured pathologist disagreement logging (JSONL)
 ```
 
-**Key design principles** (from architecture document):
+**Key design principles**:
 - Separate LLM planning from image execution (TissueLab pattern)
 - Natural language explanations over heatmaps (PathFinder pattern)
 - Explicit verification before every diagnosis output (WSI-Agents pattern)
@@ -66,7 +65,7 @@
 
 ## Quick start
 
-### Install (mock mode — no GPU required)
+### Install
 
 ```bash
 git clone https://github.com/sudouserx/hakim_ai
@@ -80,7 +79,7 @@ pip install -e ".[dev]"
 python scripts/demo.py
 ```
 
-This runs the full pipeline with synthetic data, saves an HTML report and MDT summary, and demonstrates feedback capture — no WSI files or GPU needed.
+This runs the full pipeline, saves an HTML report and MDT summary, and demonstrates feedback capture.
 
 ### Run on a real slide
 
@@ -99,10 +98,8 @@ python scripts/run_pipeline.py \
 ### Run tests
 
 ```bash
-pytest                          # all tests (202 pass)
-pytest tests/test_pipeline.py   # integration only
-pytest tests/test_real_mode.py  # end-to-end integration against real WSI
-pytest --cov=hakim_ai       # with coverage
+pytest                          # all tests
+pytest --cov=hakim_ai           # with coverage
 ```
 
 ---
@@ -113,52 +110,30 @@ pytest --cov=hakim_ai       # with coverage
 hakim_ai/
 ├── config/
 │   ├── default.yaml            # default configuration
+│   ├── prod.yml                # Production multi-GPU configuration
+│   ├── kaggle.yaml             # Kaggle T4 single-GPU constraint configuration
 │   └── test.yaml               # CI/CD test configuration
 ├── hakim_ai/
 │   ├── __init__.py             # public API
 │   ├── types.py                # all typed dataclasses
 │   ├── config.py               # PipelineConfig + sub-configs + dotenv support
 │   ├── pipeline.py             # HistopathologyPipeline orchestrator (Thread-safe, GPU cleanup)
-│   ├── foundation_models/
-│   │   ├── base_encoder.py     # ABC for encoders and VLMs
-│   │   ├── uni_adapter.py      # UNI 2 patch encoder (stub + real path)
-│   │   └── conch_adapter.py    # CONCH slide encoder + PathChat VLM
-│   ├── layer0_input/
-│   │   ├── wsi_loader.py       # MockWSILoader + OpenSlideWSILoader
-│   │   └── qc_agent.py         # quality control agent
-│   ├── layer1_router/
-│   │   └── router_agent.py     # triage / routing agent
-│   ├── layer2_evidence/
-│   │   ├── navigation_agent.py # multi-scale ROI selection
-│   │   ├── segmentation_agent.py # tissue compartment mapping
-│   │   └── description_agent.py  # NL patch descriptions
-│   ├── layer3_fusion/
-│   │   ├── molecular_agent.py      # MSI/Lauren/HER2/EBV prediction
-│   │   ├── clinical_context_agent.py # CONCH attention-based fusion
-│   │   ├── knowledge_retrieval_agent.py  # FAISS RAG semantic search
-│   │   └── radiology_agent.py      # DICOM metadata extraction
-│   ├── layer4_verification/
-│   │   ├── logic_agent.py          # consistency and discordance rules
-│   │   └── confidence_calibrator.py  # Energy-based OOD + calibration
-│   ├── layer5_synthesis/
-│   │   ├── diagnosis_agent.py      # dynamic diagnostic labeling
-│   │   ├── explanation_agent.py    # NL explanation generation
-│   │   └── report_agent.py         # structured pathology report
-│   ├── layer6_interface/
-│   │   ├── ui_renderer.py          # standalone HTML report
-│   │   └── feedback_capture.py     # JSONL feedback + MDT export
-│   └── utils/
-│       ├── logging_utils.py
-│       ├── image_utils.py          # stain normalization, tissue masking
-│       └── rag_store.py            # FAISS / BM25 knowledge store
+│   ├── multi_slide_pipeline.py # ProcessPoolExecutor for concurrent slide batch processing
+│   ├── foundation_models/      # Encoders and VLM adapters
+│   ├── layer0_input/           # WSI Loading & QC Agents
+│   ├── layer1_router/          # Triage / routing agents
+│   ├── layer2_evidence/        # Navigation, Segmentation, Description agents
+│   ├── layer3_fusion/          # Molecular, Clinical, Knowledge (RAG), and Radiology agents
+│   ├── layer4_verification/    # Logic checks, WHO validation, Confidence calibration
+│   ├── layer5_synthesis/       # Diagnosis and Report construction
+│   ├── layer6_interface/       # HTML rendering and structured feedback capture
+│   ├── models/                 # PyTorch architectures (ABMIL, MultiTaskHead)
+│   ├── training/               # Model fine-tuning logic (PyTorch loops) and dataset loaders
+│   └── utils/                  # Core image processing, masking, and FAISS store utilities
 ├── scripts/
 │   ├── run_pipeline.py         # CLI entry point
+│   ├── calibrate_thresholds.py # Threshold calibration via PyTorch inference
 │   └── demo.py                 # annotated walkthrough
-├── tests/
-│   ├── conftest.py             # shared fixtures
-│   ├── test_pipeline.py        # integration tests
-│   ├── test_real_mode.py       # real-world data testing
-│   └── test_*.py               # component tests
 └── pyproject.toml
 ```
 
@@ -166,23 +141,32 @@ hakim_ai/
 
 ## Configuration
 
-All configuration lives in `config/default.yaml`. The `PipelineConfig` object is the single source of truth passed to every agent, and securely loads environment variables from a `.env` file for API keys and tokens.
+The configuration resides in the `config/` directory and is governed by `hakim_ai/config.py`. The `PipelineConfig` dataclass acts as a robust, typed central truth for the entire pipeline, exposing dataset paths, scaling hyper-parameters, hardware toggles, and model selections.
 
 ```yaml
-mock_mode: true           # false → load real model weights (requires HF_TOKEN)
+
 log_level: INFO
+parallel_multi_slide: false   # Enable to process multiple WSIs concurrently via ProcessPoolExecutor
 
 qc:
   min_stain_quality: 0.50
-  min_focus_quality: 0.50
   min_coverage: 0.30
 
 molecular:
-  msi_threshold: 0.50     # P(MSI-H) above this → MSI-H label
+  msi_threshold: 0.50         # P(MSI-H) above this → MSI-H label
 
 verification:
-  temperature: 1.50       # temperature scaling; >1 softens confidence
+  calibrated: true            # utilizes optimized thresholds
+  temperature: 1.50           # temperature scaling; >1 softens confidence
   abstention_threshold: 0.35
+
+training:
+  tcga_data_root: data/tcga-stad/
+  tcga_feature_dir: data/tcga-stad/features/
+  gashis_data_root: data/gashis/
+  gchtid_data_root: data/gchtid/
+  batch_size: 16
+  device: cuda
 ```
 
 Load a custom config:
@@ -190,7 +174,7 @@ Load a custom config:
 ```python
 from hakim_ai import HistopathologyPipeline, PipelineConfig
 
-cfg = PipelineConfig.from_yaml("config/prod.yaml")
+cfg = PipelineConfig.from_yaml("config/prod.yml")
 pipeline = HistopathologyPipeline(cfg)
 ```
 
@@ -198,7 +182,7 @@ pipeline = HistopathologyPipeline(cfg)
 
 ## Foundation Models & GPU Inference
 
-The mock adapters are designed to be dropped in place. To use real model weights and enable hardware-accelerated processing:
+To use real model weights and enable hardware-accelerated processing:
 
 ```bash
 pip install "hakim_ai[models]"
@@ -212,20 +196,23 @@ HF_TOKEN=hf_your_huggingface_token
 Then in your config:
 
 ```yaml
-mock_mode: false
 foundation_models:
   patch_encoder: uni2       # loads MahmoodLab/UNI2-h from HuggingFace
   slide_encoder: conch      # loads MahmoodLab/conch
   vlm: pathchat             # loads microsoft/llava-med-v1.5-mistral-7b (4-bit)
   use_gpu: true
-  mock_mode: false
 ```
 
-Real encoder loading is integrated in `foundation_models/uni_adapter.py` and `conch_adapter.py`. The pipeline utilizes PyTorch `autocast` for memory-efficient forward passes and sequentially offloads models during execution. This memory lifecycle management ensures that the pipeline can run smoothly on memory-constrained hardware, such as a 15GB Kaggle T4 GPU.
+Real encoder loading utilizes PyTorch `autocast` for memory-efficient forward passes and sequentially offloads models during execution. This memory lifecycle management ensures that the pipeline can run smoothly on memory-constrained hardware, such as a 15GB Kaggle T4 GPU. A `parallel_multi_slide` flag dynamically leverages standard process pools for environments where compute is abundant.
 
 ---
 
 ## Core Capabilities
+
+### Model Training & Calibration
+The repository contains native training logic to fine-tune the pipeline's intelligence layers. This is supported by granular dataset configuration allowing you to specify paths for TCGA-STAD, GasHisSDB, and GCHTID explicitly. 
+
+The `calibrate_thresholds.py` script automatically runs inference over a validation set and uses Youden's J Statistic to calculate the optimal cutoffs balancing false-positives and false-negatives. The calibration logic calculates the Negative Log-Likelihood (NLL) directly on model probabilities extracted via PyTorch data loaders.
 
 ### FAISS Semantic Retrieval (RAG)
 The `KnowledgeRetrievalAgent` maintains a comprehensive vector database of the WHO 5th Edition Gastric Tumour criteria. It retrieves clinical evidence and morphological subtypes (e.g., Medullary, Micropapillary, Adenosquamous) dynamically using SentenceTransformers and FAISS, enabling the pipeline to ground diagnoses in standard pathology literature.
@@ -240,13 +227,14 @@ The system extracts real DICOM metadata via `pydicom` to provide radiology conte
 
 ## Datasets
 
-| Dataset | Size | Access | Used for |
+The pipeline expects data directories configured directly in the `TrainingConfig` layer, targeting the specific schemas of distinct open-source datasets:
+
+| Dataset | Size | Access | Config Mapping |
 |---|---|---|---|
-| TCGA-STAD | ~380 WSIs + RNAseq + mutation | Public (GDC portal) | Multi-label training: MSI, EBV, Lauren, HER2 |
-| GasHisSDB | 245K patches | Public (Zenodo) | Patch encoder fine-tuning |
-| GCHTID | 31K images, TME labels | Public (figshare 2024) | Segmentation agent fine-tuning |
+| TCGA-STAD | ~380 WSIs + RNAseq | Public (GDC portal) | `tcga_feature_dir`, `tcga_manifest_csv` |
+| GasHisSDB | 245K patches | Public (Zenodo) | `gashis_data_root` |
+| GCHTID | 31K images, TME labels | Public (figshare 2024) | `gchtid_data_root` |
 | NCT-CRC-HE-100K | 100K patches | Public (Zenodo) | Pretraining patch encoder |
-| KCCH (Yokohama) | ~185 patients | Controlled access | Asian cohort external validation |
 
 ---
 
@@ -262,22 +250,6 @@ Known limitations (from architecture synthesis):
 - Attention ≠ causation: importance maps indicate correlation, not causal evidence
 - Counterfactuals at gigapixel scale are technically unsolved; verbal approximations are used
 - HER2 from H&E is indicative only — IHC/FISH is always required for clinical decisions
-
----
-
-## Research gaps addressed
-
-This implementation explicitly targets the gaps identified in the synthesis document:
-
-| Gap | How addressed |
-|---|---|
-| No gastric cancer multi-agent system | Full STAD-focused pipeline with per-layer agents |
-| Attention ≠ explanation | NL description generation replaces heatmap-only explanation |
-| No verification layer | Logic Agent + WHO Validator + Energy-based OOD Calibration |
-| Over-reliance risk | Uncertainty statements, IHC recommendation flags, abstention mechanism |
-| Missing modality robustness | Radiology and clinical data are optional; attention-based fusion |
-| No feedback loop | FeedbackCapture records structured disagreements to JSONL |
-| Clinical adoption blockers | MDT export, structured WHO/TNM reporting, pathologist sign-off prompts |
 
 ---
 
