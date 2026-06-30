@@ -39,8 +39,11 @@ def extract_features(cfg: PipelineConfig, level: int = 1, patch_size: int = 256)
             continue
             
         wsi_path = os.path.join(wsi_dir, fname)
+        wsi_data = None
         try:
-            wsi_data = wsi_loader.load(wsi_path)
+            from hakim_ai.types import WSIInput
+            wsi_in = WSIInput(wsi_path=wsi_path, patient_id=patient_id)
+            wsi_data = wsi_loader.load(wsi_in)
             tissue_mask = compute_tissue_mask(wsi_data.thumbnail)
             
             thumb_downsample = 128
@@ -78,7 +81,7 @@ def extract_features(cfg: PipelineConfig, level: int = 1, patch_size: int = 256)
         except Exception as e:
             print(f"Error processing {fname}: {e}")
         finally:
-            if hasattr(wsi_data, "slide_handle") and wsi_data.slide_handle:
+            if wsi_data is not None and hasattr(wsi_data, "slide_handle") and wsi_data.slide_handle:
                 wsi_data.slide_handle.close()
 
 
