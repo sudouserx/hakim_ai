@@ -20,10 +20,18 @@ description:
 verification:
   calibrated: true
 
+data:
+  data_root: /kaggle/tmp/data/
+  
 training:
-  batch_size: 16              # Reduced to fit in 16GB VRAM
+  tcga_data_root: /kaggle/tmp/data/tcga-stad/
+  tcga_feature_dir: /kaggle/tmp/data/tcga-stad/features/
+  tcga_manifest_csv: /kaggle/tmp/data/tcga-stad/manifest.csv
+  gashis_data_root: /kaggle/tmp/data/gashis/
+  gchtid_data_root: /kaggle/tmp/data/gchtid/
+  batch_size: 16
   learning_rate: 0.0001
-  num_epochs: 20              # Fewer epochs for Kaggle time limits
+  num_epochs: 20
   num_folds: 3
   device: cuda
   checkpoint_dir: /kaggle/tmp/checkpoints
