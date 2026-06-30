@@ -96,6 +96,13 @@ class HistopathologyPipeline:
             kb_path = "data/knowledge_base.json" 
         else:
             kb_path = cfg.rag.knowledge_base_path
+            
+        import os, json
+        if not os.path.exists(kb_path):
+            os.makedirs(os.path.dirname(kb_path), exist_ok=True)
+            with open(kb_path, 'w') as f:
+                json.dump({"documents": [], "cases": []}, f)
+
         rag_store = RAGStore(knowledge_base_path=kb_path)
         self.molecular_agent = MolecularPredictionAgent(cfg.molecular, conch_encoder)
         self.clinical_context_agent = ClinicalContextAgent(encoder=conch_encoder)
