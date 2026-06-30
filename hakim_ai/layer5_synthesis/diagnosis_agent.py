@@ -108,10 +108,10 @@ class DiagnosisAgent:
 
         diagnostic_label = router_decision.label if router_decision else DiagnosticLabel.MALIGNANT
         
-        # Override to benign if very low tumour fraction and no WHO match
+        # Override to UNKNOWN/ESCALATE if very low tumour fraction and no WHO match
         if evidence.segmentation.tumour_fraction < 0.05 and not verification.who_validation.matched_criteria:
-            diagnostic_label = DiagnosticLabel.BENIGN
-            primary = "Gastric mucosa, no evidence of malignancy"
+            diagnostic_label = DiagnosticLabel.UNKNOWN
+            primary = "Indeterminate findings (low tumour fraction, no WHO criteria match) — manual review required"
 
         diagnosis = Diagnosis(
             primary_diagnosis=primary,

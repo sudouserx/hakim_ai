@@ -111,10 +111,9 @@ class MolecularPredictionAgent:
             }
             lauren_class = max(lauren_probs, key=lauren_probs.get)
             
-            her2_softmax = torch.softmax(logits['her2'], dim=-1).squeeze().tolist()
-            # 0=negative, 1=equivocal, 2=positive
-            # Probability of HER2+ is class 2
-            her2_prob = round(her2_softmax[2], 4)
+            # HER2 prediction removed from H&E logic per clinical safety review.
+            # HER2 status must be extracted via IHC/EHR reports in ClinicalContextAgent.
+            her2_prob = 0.0
 
         msi_status = (
             MSIStatus.MSI_HIGH
@@ -129,12 +128,7 @@ class MolecularPredictionAgent:
         }
 
         # HER2
-        if her2_prob >= self.cfg.her2_threshold + 0.15:
-            her2_status = HER2Status.POSITIVE
-        elif her2_prob >= self.cfg.her2_threshold - 0.10:
-            her2_status = HER2Status.EQUIVOCAL
-        else:
-            her2_status = HER2Status.NEGATIVE
+        her2_status = HER2Status.UNKNOWN
 
         # EBV
         ebv_status = (
@@ -154,7 +148,6 @@ class MolecularPredictionAgent:
             ebv_probability=round(ebv_prob, 4),
             raw_logits={
                 "msi_logit": round(math.log(msi_prob / (1 - msi_prob + 1e-8)), 4),
-                "her2_logit": round(math.log(her2_prob / (1 - her2_prob + 1e-8)), 4),
                 "ebv_logit": round(math.log(ebv_prob / (1 - ebv_prob + 1e-8)), 4),
             },
         )

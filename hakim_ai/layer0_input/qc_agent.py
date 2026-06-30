@@ -99,7 +99,7 @@ class QCAgent:
         }
 
         passed, rejection_reason = self._evaluate(
-            stain_score, focus_score, cov_score, artifacts
+            stain_score, focus_score, cov_score, artifacts, area_mm2
         )
 
         result = QCResult(
@@ -134,8 +134,13 @@ class QCAgent:
         focus: float,
         coverage: float,
         artifacts: List[str],
+        area_mm2: float,
     ) -> tuple[bool, Optional[str]]:
         reasons: List[str] = []
+        
+        # Dynamic coverage threshold based on tissue area (resection vs biopsy)
+        dynamic_min_coverage = 0.05 if area_mm2 < 25.0 else self.cfg.min_coverage
+        
         if stain < self.cfg.min_stain_quality:
             reasons.append(
                 f"Stain quality {stain:.2f} < threshold {self.cfg.min_stain_quality}"
@@ -144,9 +149,9 @@ class QCAgent:
             reasons.append(
                 f"Focus quality {focus:.2f} < threshold {self.cfg.min_focus_quality}"
             )
-        if coverage < self.cfg.min_coverage:
+        if coverage < dynamic_min_coverage:
             reasons.append(
-                f"Tissue coverage {coverage:.2f} < threshold {self.cfg.min_coverage}"
+                f"Tissue coverage {coverage:.2f} < dynamic threshold {dynamic_min_coverage:.2f} (Area: {area_mm2:.1f}mm²)"
             )
         if self.cfg.reject_on_artifact and artifacts:
             reasons.append(f"Artifacts detected: {', '.join(artifacts)}")
