@@ -103,6 +103,11 @@ def main():
                 handler.preprocess()
                 handler.verify()
                 
+                if identifier.lower() == "tcga-stad":
+                    logger.info("Triggering feature extraction for TCGA-STAD...")
+                    from hakim_ai.training.feature_extraction import extract_features
+                    extract_features(cfg)
+                
     logger.info("Done.")
     return 0
 

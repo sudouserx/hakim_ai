@@ -36,7 +36,7 @@ def train_segmentation(cfg: PipelineConfig):
         from transformers import SegformerForSemanticSegmentation
         model = SegformerForSemanticSegmentation.from_pretrained(
             "nvidia/mit-b0",
-            num_labels=6,
+            num_labels=7,
             ignore_mismatched_sizes=True
         ).to(device)
     except ImportError:

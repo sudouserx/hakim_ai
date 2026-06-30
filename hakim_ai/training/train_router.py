@@ -53,7 +53,7 @@ def train_router(cfg: PipelineConfig):
         model.train()
         epoch_loss = 0.0
         
-        for images, labels in tqdm(dataloader, desc=f"Epoch {epoch+1}/{epochs}"):
+        for images, labels in tqdm(dataloader, desc=f"Epoch {epoch+1}/{cfg.training.num_epochs}"):
             # Map Normal (0) to Benign (0), Abnormal (1) to Malignant (2)
             mapped_labels = torch.where(labels == 1, 2, 0).to(device)
             

@@ -21,7 +21,7 @@ def extract_features(cfg: PipelineConfig, level: int = 1, patch_size: int = 256)
         print("TCGA data root and feature dir must be configured for extraction. Skipping.")
         return
         
-    wsi_dir = cfg.training.tcga_data_root
+    wsi_dir = os.path.join(cfg.training.tcga_data_root, "slides")
     output_dir = cfg.training.tcga_feature_dir
     os.makedirs(output_dir, exist_ok=True)
     
