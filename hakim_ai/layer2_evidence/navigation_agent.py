@@ -57,16 +57,16 @@ class NavigationAgent:
         # Load ABMIL model for importance scoring
         self.abmil = None
         try:
-                import torch
-                self.device = torch.device("cuda" if torch.cuda.is_available() and getattr(encoder, "use_gpu", False) else "cpu")
-                self.abmil = GatedAttentionMIL(input_dim=encoder.embedding_dim).to(self.device)
-                ckpt_path = "checkpoints/abmil_multi_task.pt"
-                if os.path.exists(ckpt_path):
-                    state = torch.load(ckpt_path, map_location=self.device, weights_only=True)
-                    if 'mil' in state:
-                        self.abmil.load_state_dict(state['mil'])
-            except Exception as e:
-                logger.warning(f"Could not load ABMIL model: {e}")
+            import torch
+            self.device = torch.device("cuda" if torch.cuda.is_available() and getattr(encoder, "use_gpu", False) else "cpu")
+            self.abmil = GatedAttentionMIL(input_dim=encoder.embedding_dim).to(self.device)
+            ckpt_path = "checkpoints/abmil_multi_task.pt"
+            if os.path.exists(ckpt_path):
+                state = torch.load(ckpt_path, map_location=self.device, weights_only=True)
+                if 'mil' in state:
+                    self.abmil.load_state_dict(state['mil'])
+        except Exception as e:
+            logger.warning(f"Could not load ABMIL model: {e}")
 
     def run(self, wsi_data: WSIData, qc_result: QCResult) -> NavigationResult:
         logger.info("Navigation started for patient %s", wsi_data.patient_id)
@@ -123,24 +123,24 @@ class NavigationAgent:
             raise RuntimeError("ABMIL model is missing, cannot score patches.")
             
         with torch.no_grad():
-                # features: (1, N, D)
-                feats_t = torch.tensor([p["feat"] for p in extracted_patches], dtype=torch.float32).unsqueeze(0).to(self.device)
-                _, attn = self.abmil(feats_t)
-                # Normalize attention to [0, 1] range for importance scores
-                attn_scores = attn.squeeze(0)
-                if len(attn_scores) > 0:
-                    attn_scores = (attn_scores - attn_scores.min()) / (attn_scores.max() - attn_scores.min() + 1e-8)
-                attn_scores = attn_scores.cpu().numpy()
-                
-            for p, score in zip(extracted_patches, attn_scores):
-                score = round(float(score), 4)
-                patch_obj = PatchCoordinate(
-                    x=p["x"], y=p["y"], level=p["level"],
-                    width=self.cfg.patch_size, height=self.cfg.patch_size,
-                    importance_score=score, label=self._label_region(score)
-                )
-                patch_obj.feature_vector = p["feat"]
-                all_patches.append(patch_obj)
+            # features: (1, N, D)
+            feats_t = torch.tensor([p["feat"] for p in extracted_patches], dtype=torch.float32).unsqueeze(0).to(self.device)
+            _, attn = self.abmil(feats_t)
+            # Normalize attention to [0, 1] range for importance scores
+            attn_scores = attn.squeeze(0)
+            if len(attn_scores) > 0:
+                attn_scores = (attn_scores - attn_scores.min()) / (attn_scores.max() - attn_scores.min() + 1e-8)
+            attn_scores = attn_scores.cpu().numpy()
+            
+        for p, score in zip(extracted_patches, attn_scores):
+            score = round(float(score), 4)
+            patch_obj = PatchCoordinate(
+                x=p["x"], y=p["y"], level=p["level"],
+                width=self.cfg.patch_size, height=self.cfg.patch_size,
+                importance_score=score, label=self._label_region(score)
+            )
+            patch_obj.feature_vector = p["feat"]
+            all_patches.append(patch_obj)
 
         # Select representative patches using KMeans clustering on feature embeddings
         # to ensure morphological diversity (phenotype representation).

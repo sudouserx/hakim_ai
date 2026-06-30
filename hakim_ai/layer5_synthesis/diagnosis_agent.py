@@ -90,6 +90,14 @@ class DiagnosisAgent:
             self.grade_model = None
             self.device = None
 
+    # Safe abstention string for T-staging.  T-stage is determined by
+    # invasion depth through anatomical layers (mucosa → serosa), which
+    # cannot be inferred from 2D tumour area fraction on H&E patches.
+    _TNM_ABSTENTION: str = (
+        "Abstained: T-stage cannot be determined from 2D tumour area "
+        "fraction. Requires 3D spatial evaluation or full surgical resection."
+    )
+
     def run(
         self,
         evidence: EvidenceBundle,
@@ -104,10 +112,9 @@ class DiagnosisAgent:
         primary = _build_primary_diagnosis(fusion, who_suggested)
         differentials = _build_differentials(fusion, evidence)
         supporting = self._collect_supporting_findings(evidence, fusion)
-        tnm = self._estimate_tnm_contribution(evidence, fusion)
 
         diagnostic_label = router_decision.label if router_decision else DiagnosticLabel.MALIGNANT
-        
+
         # Override to UNKNOWN/ESCALATE if very low tumour fraction and no WHO match
         if evidence.segmentation.tumour_fraction < 0.05 and not verification.who_validation.matched_criteria:
             diagnostic_label = DiagnosticLabel.UNKNOWN
@@ -118,7 +125,7 @@ class DiagnosisAgent:
             diagnostic_label=diagnostic_label,
             differential_diagnoses=differentials,
             grade=grade,
-            tnm_contribution=tnm,
+            tnm_contribution=self._TNM_ABSTENTION,
             overall_confidence=verification.calibrated_confidence,
             supporting_findings=supporting,
         )
@@ -131,23 +138,44 @@ class DiagnosisAgent:
     # ------------------------------------------------------------------
 
     def _grade_from_morphology(self, evidence: EvidenceBundle) -> Optional[str]:
-        """Infer histological grade from patch description narratives or ML model."""
-        narratives = " ".join(d.narrative.lower() for d in evidence.descriptions)
-        if "poorly differentiated" in narratives or "poor differentiation" in narratives:
-            return "poorly differentiated (Grade 3)"
-        if "moderately differentiated" in narratives or "moderate differentiation" in narratives:
-            return "moderately differentiated (Grade 2)"
-        if "well differentiated" in narratives or "well-differentiated" in narratives:
-            return "well differentiated (Grade 1)"
-            
+        """Determine histological grade using ML feature extraction.
+
+        Priority hierarchy:
+          1. PyTorch ``HistologicalGradeClassifier`` over extracted patch
+             features — this is the ground-truth source when available.
+          2. Safe abstention — if the ML model is unavailable, we do NOT
+             attempt naive substring matching on VLM narratives because
+             simple ``in`` checks are vulnerable to negation errors
+             (e.g. "NOT poorly differentiated" would incorrectly match
+             "poorly differentiated").  Proper NLP semantic extraction
+             or multimodal ML features are required to safely parse
+             free-text narratives.
+        """
+        # --- Priority 1: ML model inference ---
         if self.grade_model is not None and evidence.navigation.selected_patches:
             import numpy as np
-            features = [p.feature_vector for p in evidence.navigation.selected_patches if getattr(p, "feature_vector", None) is not None]
+            features: list = [
+                p.feature_vector
+                for p in evidence.navigation.selected_patches
+                if getattr(p, "feature_vector", None) is not None
+            ]
             if features:
                 mean_feat = np.mean(features, axis=0).tolist()
-                return self.grade_model.predict_grade(mean_feat, self.device)
-                
-        return "indeterminate grade (IHC recommended)"
+                grade = self.grade_model.predict_grade(mean_feat, self.device)
+                logger.info("Grade determined by ML model: %s", grade)
+                return grade
+
+        # --- Priority 2: Safe abstention ---
+        # NOTE: Do NOT fall back to substring matching on VLM narratives.
+        # Naive ``if 'poorly differentiated' in text`` is fragile against
+        # negation, hedging, and multi-clause sentences.  A production
+        # replacement should use either:
+        #   - NLP-based semantic role labelling / negation detection, or
+        #   - Multimodal feature vectors fed to a trained classifier.
+        logger.warning(
+            "Grade model unavailable or no patch features — returning indeterminate grade"
+        )
+        return "indeterminate grade (requires ML feature extraction or pathologist review)"
 
     def _collect_supporting_findings(
         self, evidence: EvidenceBundle, fusion: FusionResult
@@ -177,16 +205,8 @@ class DiagnosisAgent:
 
         return findings[:8]
 
-    def _estimate_tnm_contribution(
-        self, evidence: EvidenceBundle, fusion: FusionResult
-    ) -> Optional[str]:
-        """
-        Estimate T-stage contribution from H&E findings.
-        Definitive staging requires surgical specimen with full assessment.
-        """
-        tumour_frac = evidence.segmentation.tumour_fraction
-        if tumour_frac > 0.60:
-            return "pT3-pT4 (estimated — confirm with full resection staging)"
-        if tumour_frac > 0.30:
-            return "pT2-pT3 (estimated — confirm with full resection staging)"
-        return "pT1-pT2 (estimated from biopsy — full staging requires resection)"
+    # NOTE: _estimate_tnm_contribution has been intentionally removed.
+    # T-stage is determined by invasion depth through anatomical wall layers
+    # (mucosa, submucosa, muscularis propria, serosa), NOT by 2D tumour
+    # area fraction.  The previous area-based heuristic was a clinical
+    # safety hazard.  See _TNM_ABSTENTION for the safe replacement.

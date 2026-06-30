@@ -17,7 +17,7 @@ Design principles enforced here:
   - Every layer failure is caught and surfaced in PipelineResult.error
   - Benign fast-path: abbreviated workflow for clearly benign cases
   - Abstention: low-confidence cases escalate before diagnosis is emitted
-  - Layer 2 agents run independently (parallelisable with concurrent.futures)
+  - Layer 2 agents run sequentially (models assumed persistently managed)
 """
 from __future__ import annotations
 
@@ -179,11 +179,9 @@ class HistopathologyPipeline:
                 return result
 
             # ── Layer 1: Router ──────────────────────────────────────────── #
-            if getattr(self.router, "encoder", None) is not None:
-                self.router.encoder.load()
             router_decision = self.router.run(wsi_data, qc_result)
             result.router_decision = router_decision
-    
+
             if router_decision.escalate_to_human:
                 result.escalated_to_human = True
                 self._logger.warning(
@@ -202,32 +200,17 @@ class HistopathologyPipeline:
                 )
                 return result
 
-            # ── Layer 2: Evidence Collection (logically parallel) ─────────── #
+            # ── Layer 2: Evidence Collection (sequential) ─────────────────── #
+            # Models are assumed to be persistently loaded and managed by an
+            # external inference server or initialised once at pipeline
+            # construction.  No manual .load() / .unload() cycling — this
+            # avoids GPU thrashing from moving weights in and out of VRAM.
+            # Agents run sequentially on the main thread to avoid GIL
+            # bottlenecks and CUDA context collisions from ThreadPoolExecutor.
             nav_result = self.navigation_agent.run(wsi_data, qc_result)
-            # Unload encoder to free memory before loading VLM
-            if getattr(self.router, "encoder", None) is not None:
-                self.router.encoder.unload()
-            self._cleanup_gpu()
+            seg_result = self.segmentation_agent.run(wsi_data, nav_result)
+            desc_result = self.description_agent.run(wsi_data, nav_result)
 
-            # Load VLM for description
-            if getattr(self.description_agent, "vlm", None) is not None:
-                self.description_agent.vlm.load()
-            
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                future_seg = executor.submit(self.segmentation_agent.run, wsi_data, nav_result)
-                future_desc = executor.submit(self.description_agent.run, wsi_data, nav_result)
-                
-                seg_result = future_seg.result()
-                desc_result = future_desc.result()
-                
-            # Unload VLM
-            if getattr(self.description_agent, "vlm", None) is not None:
-                self.description_agent.vlm.unload()
-                
-            # GPU memory cleanup
-            self._cleanup_gpu()
-    
             evidence = EvidenceBundle(
                 navigation=nav_result,
                 segmentation=seg_result,
@@ -236,20 +219,14 @@ class HistopathologyPipeline:
             result.evidence = evidence
 
             # ── Layer 3: Multimodal Fusion ───────────────────────────────── #
-            if getattr(self.molecular_agent, "encoder", None) is not None:
-                self.molecular_agent.encoder.load()
-
             molecular = self.molecular_agent.run(evidence)
             clinical_ctx = self.clinical_context_agent.run(clinical_data, evidence)
             knowledge = self.knowledge_agent.run(molecular, evidence)
 
-            if getattr(self.molecular_agent, "encoder", None) is not None:
-                self.molecular_agent.encoder.unload()
-    
             radiology_findings = None
             if inp.radiology_path and not router_decision.skip_radiology_fusion:
                 radiology_findings = self.radiology_agent.run(inp.radiology_path, evidence)
-    
+
             fusion = FusionResult(
                 molecular=molecular,
                 clinical_context=clinical_ctx,
@@ -290,16 +267,10 @@ class HistopathologyPipeline:
                 except Exception as e:
                     self._logger.warning(f"Failed to close slide handle: {e}")
 
-    def _cleanup_gpu(self):
-        """Free up GPU memory."""
-        import gc
-        gc.collect()
-        try:
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except ImportError:
-            pass
+    # NOTE: _cleanup_gpu() has been intentionally removed.
+    # Aggressive gc.collect() + torch.cuda.empty_cache() between every agent
+    # step caused GPU thrashing.  Models are now assumed to be persistently
+    # managed (either loaded once at init or served by an inference server).
 
     # ------------------------------------------------------------------
     # Layer 6 helpers (called explicitly by the user/CLI after run())
