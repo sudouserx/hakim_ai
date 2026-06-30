@@ -10,7 +10,7 @@ import torch
 from pathlib import Path
 from tqdm import tqdm
 
-from hakim_ai.config import FoundationModelsConfig, PipelineConfig
+from hakim_ai.config import FoundationModelConfig, PipelineConfig
 from hakim_ai.foundation_models import build_patch_encoder
 from hakim_ai.layer0_input import build_wsi_loader
 from hakim_ai.utils.image_utils import compute_tissue_mask, extract_patch_from_wsi, get_patch_coordinates, build_normalizer
