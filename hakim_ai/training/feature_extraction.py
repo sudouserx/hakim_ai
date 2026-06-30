@@ -64,6 +64,9 @@ def extract_features(cfg: PipelineConfig, level: int = 1, patch_size: int = 256)
             )
             
             features = []
+            batch_patches = []
+            batch_size = cfg.training.batch_size
+            
             for x, y in coords:
                 patch = extract_patch_from_wsi(
                     wsi_path, x, y, level, size=(patch_size, patch_size),
@@ -71,8 +74,16 @@ def extract_features(cfg: PipelineConfig, level: int = 1, patch_size: int = 256)
                     normalizer=normalizer
                 )
                 if patch is not None:
-                    feat = encoder.encode_patch(patch)
-                    features.append(feat)
+                    batch_patches.append(patch)
+                    
+                if len(batch_patches) >= batch_size:
+                    batch_feats = encoder.encode_batch(batch_patches)
+                    features.extend(batch_feats)
+                    batch_patches = []
+                    
+            if batch_patches:
+                batch_feats = encoder.encode_batch(batch_patches)
+                features.extend(batch_feats)
                     
             if features:
                 features_t = torch.tensor(features, dtype=torch.float32)
