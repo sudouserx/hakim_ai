@@ -42,47 +42,36 @@ logger = get_logger("layer4.verification")
 # Simplified rule table: (who_term, required_features, forbidden_combos)
 _WHO_GASTRIC_TERMS = {
     "tubular adenocarcinoma": {
-        "lauren_compatible": [LaurenClassification.INTESTINAL, LaurenClassification.MIXED],
         "description_keywords": ["tubular", "glandular", "gland"],
     },
     "papillary adenocarcinoma": {
-        "lauren_compatible": [LaurenClassification.INTESTINAL],
         "description_keywords": ["papillary", "papillae", "fibrovascular core"],
     },
     "poorly cohesive carcinoma (signet-ring cell type)": {
-        "lauren_compatible": [LaurenClassification.DIFFUSE],
         "description_keywords": ["signet", "poorly cohesive", "diffuse"],
     },
     "mucinous adenocarcinoma": {
-        "lauren_compatible": [LaurenClassification.INTESTINAL, LaurenClassification.MIXED],
         "description_keywords": ["mucin", "mucinous", "extracellular"],
     },
     "gastric adenocarcinoma NOS": {
-        "lauren_compatible": list(LaurenClassification),
         "description_keywords": [],
     },
     "mixed adenocarcinoma": {
-        "lauren_compatible": [LaurenClassification.MIXED],
         "description_keywords": ["mixed", "tubular", "poorly cohesive"],
     },
     "squamous cell carcinoma": {
-        "lauren_compatible": [LaurenClassification.UNKNOWN],
         "description_keywords": ["squamous", "keratin"],
     },
     "adenosquamous carcinoma": {
-        "lauren_compatible": [LaurenClassification.MIXED, LaurenClassification.UNKNOWN],
         "description_keywords": ["squamous", "glandular", "adenosquamous"],
     },
     "medullary carcinoma": {
-        "lauren_compatible": [LaurenClassification.UNKNOWN, LaurenClassification.INTESTINAL],
         "description_keywords": ["medullary", "lymphoid", "syncytial"],
     },
     "hepatoid adenocarcinoma": {
-        "lauren_compatible": [LaurenClassification.INTESTINAL, LaurenClassification.UNKNOWN],
         "description_keywords": ["hepatoid", "hepatocellular"],
     },
     "undifferentiated carcinoma": {
-        "lauren_compatible": [LaurenClassification.UNKNOWN],
         "description_keywords": ["undifferentiated", "solid", "sheet"],
     },
 }
@@ -101,7 +90,6 @@ class WHOValidator:
     ) -> WHOValidationResult:
         logger.info("WHO validation started")
 
-        lauren = fusion.molecular.lauren_class
         all_narrative = " ".join(d.narrative.lower() for d in evidence.descriptions)
 
         matched: List[str] = []
@@ -109,12 +97,11 @@ class WHOValidator:
         suggested: Optional[str] = None
 
         for term, rules in _WHO_GASTRIC_TERMS.items():
-            compatible = lauren in rules["lauren_compatible"]
             keywords_present = (
                 not rules["description_keywords"]
                 or any(kw in all_narrative for kw in rules["description_keywords"])
             )
-            if compatible and keywords_present:
+            if keywords_present:
                 matched.append(term)
                 if suggested is None:
                     suggested = term
@@ -122,8 +109,7 @@ class WHOValidator:
         if not matched:
             violations.append(
                 f"No WHO 5th Edition gastric tumour category matched for "
-                f"Lauren type '{lauren.value}' with current morphological descriptions. "
-                f"Defaulting to 'gastric adenocarcinoma NOS'."
+                f"current morphological descriptions. Defaulting to 'gastric adenocarcinoma NOS'."
             )
             suggested = "gastric adenocarcinoma NOS"
 
