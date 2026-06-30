@@ -88,6 +88,18 @@ python scripts/prepare_data.py --dataset tcga-stad
 python scripts/prepare_data.py --all --dry-run
 ```
 
+### Train the models
+
+The training scripts are located within the `hakim_ai/training/` directory. They all accept a `--config` argument to parse hyperparameters.
+
+You execute them from the command line using:
+
+    For the MIL Classifier: python hakim_ai/training/train_mil_classifier.py --config config/kaggle.yaml
+
+    For the Router Classifier: python hakim_ai/training/train_router.py --config config/kaggle.yaml
+
+    For the Segmentation Model: python hakim_ai/training/train_segmentation.py --config config/kaggle.yaml
+
 ### Run the demo
 
 ```bash
@@ -100,6 +112,7 @@ This runs the full pipeline, saves an HTML report and MDT summary, and demonstra
 
 ```bash
 python scripts/run_pipeline.py \
+    --config config/kaggle.yaml \
     --patient-id TCGA-BR-4253 \
     --wsi-path /data/slides/TCGA-BR-4253.svs \
     --radiology-path /data/dicom/CT_study.dcm \

@@ -18,7 +18,7 @@ python scripts/run_pipeline.py \\
     --radiology /path/to/ct.dcm
 
 # Use a custom config:
-python scripts/run_pipeline.py --config config/default.yaml --patient-id P001 --wsi-path slide.svs
+python scripts/run_pipeline.py --config config/kaggle.yaml --patient-id P001 --wsi-path slide.svs
 
 # Save HTML report and MDT summary:
 python scripts/run_pipeline.py --patient-id P001 --wsi-path slide.svs --save-report --save-mdt
