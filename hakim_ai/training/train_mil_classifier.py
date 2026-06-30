@@ -57,6 +57,7 @@ def train_mil(cfg: PipelineConfig):
     for epoch in range(cfg.training.num_epochs):
         mil.train()
         model.train()
+        epoch_loss = 0.0
         
         optimizer.zero_grad()
         for step, (features, mask, labels) in enumerate(tqdm(dataloader, desc=f"Epoch {epoch+1}/{cfg.training.num_epochs}")):
@@ -69,8 +70,8 @@ def train_mil(cfg: PipelineConfig):
             logits = model(slide_embed)
             
             # Multi-task loss (focal loss for rare classes MSI and EBV)
-            loss_msi = focal_loss_bce(logits['msi'].squeeze(), labels['msi'])
-            loss_ebv = focal_loss_bce(logits['ebv'].squeeze(), labels['ebv'])
+            loss_msi = focal_loss_bce(logits['msi'].view(-1), labels['msi'].float().view(-1))
+            loss_ebv = focal_loss_bce(logits['ebv'].view(-1), labels['ebv'].float().view(-1))
             loss_lauren = ce_loss(logits['lauren'], labels['lauren'])
             
             loss = (loss_msi + loss_ebv + loss_lauren) / grad_accum_steps
