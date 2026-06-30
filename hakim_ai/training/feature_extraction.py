@@ -13,7 +13,7 @@ from tqdm import tqdm
 from hakim_ai.config import FoundationModelConfig, PipelineConfig
 from hakim_ai.foundation_models import build_patch_encoder
 from hakim_ai.layer0_input import build_wsi_loader
-from hakim_ai.utils.image_utils import compute_tissue_mask, extract_patch_from_wsi, get_patch_coordinates, build_normalizer
+from hakim_ai.utils.image_utils import compute_tissue_mask, extract_patch_from_wsi, extract_patch_coordinates, build_normalizer
 
 
 def extract_features(cfg: PipelineConfig, level: int = 1, patch_size: int = 256):
@@ -42,10 +42,26 @@ def extract_features(cfg: PipelineConfig, level: int = 1, patch_size: int = 256)
         try:
             wsi_data = wsi_loader.load(wsi_path)
             tissue_mask = compute_tissue_mask(wsi_data.thumbnail)
-            coords = get_patch_coordinates(wsi_data, tissue_mask, level=level, patch_size=patch_size)
+            
+            thumb_downsample = 128
+            if wsi_data.level_dimensions and wsi_data.thumbnail:
+                try:
+                    import numpy as np
+                    w_full = wsi_data.level_dimensions[0][0]
+                    thumb_w = len(wsi_data.thumbnail[0]) if isinstance(wsi_data.thumbnail, list) else np.array(wsi_data.thumbnail).shape[1]
+                    thumb_downsample = max(1, w_full // thumb_w)
+                except Exception:
+                    pass
+
+            coords = extract_patch_coordinates(
+                tissue_mask=tissue_mask,
+                patch_size=patch_size,
+                thumbnail_downsample=thumb_downsample,
+                top_k=2000
+            )
             
             features = []
-            for x, y, _ in coords:
+            for x, y in coords:
                 patch = extract_patch_from_wsi(
                     wsi_path, x, y, level, size=(patch_size, patch_size),
                     slide_handle=getattr(wsi_data, "slide_handle", None),
