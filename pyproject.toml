@@ -47,8 +47,8 @@ dev = [
 
 # Real model inference (GPU recommended)
 models = [
-    "torch>=2.0",
-    "torchvision>=0.15",
+    "torch==2.4.0",
+    "torchvision==0.19.0",
     "timm>=0.9",
     "transformers>=4.35",
     "huggingface_hub>=0.20",
@@ -57,6 +57,10 @@ models = [
     "open_clip_torch>=2.0",
     "h5py>=3.8",
     "zarr>=2.16",
+    "pydicom",
+    "accelerate",
+    "bitsandbytes>=0.41.0",
+    "python-dotenv",
 ]
 
 # Dataset download and preprocessing
