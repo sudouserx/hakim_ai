@@ -51,7 +51,7 @@ class MolecularPredictionAgent:
     Outputs: MolecularPrediction
     """
 
-    def __init__(self, cfg: MolecularConfig, encoder: Optional[BaseEncoder] = None, seed: int = 42):
+    def __init__(self, cfg: MolecularConfig, encoder: Optional[BaseEncoder] = None, seed: int = 42, checkpoint_dir: str = "checkpoints"):
         self.cfg = cfg
         self.encoder = encoder
         self._rng = random.Random(seed)
@@ -65,7 +65,7 @@ class MolecularPredictionAgent:
                 self.device = torch.device("cuda" if torch.cuda.is_available() and getattr(encoder, "use_gpu", False) else "cpu")
                 self.abmil = GatedAttentionMIL(input_dim=encoder.embedding_dim).to(self.device)
                 self.head = MultiTaskHead(input_dim=encoder.embedding_dim).to(self.device)
-                ckpt_path = "checkpoints/abmil_multi_task.pt"
+                ckpt_path = os.path.join(checkpoint_dir, "abmil_multi_task.pt")
                 if os.path.exists(ckpt_path):
                     state = torch.load(ckpt_path, map_location=self.device, weights_only=True)
                     if 'mil' in state:
@@ -94,7 +94,18 @@ class MolecularPredictionAgent:
             patches = evidence.navigation.selected_patches
             feats = [p.feature_vector for p in patches if getattr(p, "feature_vector", None) is not None]
             if not feats:
-                raise RuntimeError("No patch features available for molecular prediction.")
+                logger.warning("No patch features available. Returning default/unknown molecular prediction.")
+                return MolecularPrediction(
+                    msi_status=MSIStatus.UNKNOWN,
+                    msi_probability=0.0,
+                    lauren_class=LaurenClassification.UNKNOWN,
+                    lauren_confidence=0.0,
+                    her2_status=HER2Status.UNKNOWN,
+                    her2_probability=0.0,
+                    ebv_status=EBVStatus.UNKNOWN,
+                    ebv_probability=0.0,
+                    raw_logits={"msi_logit": 0.0, "ebv_logit": 0.0}
+                )
                 
             feats_t = torch.tensor(feats, dtype=torch.float32).unsqueeze(0).to(self.device)
             slide_embed, _ = self.abmil(feats_t)

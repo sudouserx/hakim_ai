@@ -48,7 +48,7 @@ class NavigationAgent:
     Outputs: NavigationResult
     """
 
-    def __init__(self, cfg: NavigationConfig, encoder: BaseEncoder, seed: int = 42, normalizer: Any = None):
+    def __init__(self, cfg: NavigationConfig, encoder: BaseEncoder, seed: int = 42, normalizer: Any = None, checkpoint_dir: str = "checkpoints"):
         self.cfg = cfg
         self.encoder = encoder
         self.normalizer = normalizer
@@ -60,7 +60,7 @@ class NavigationAgent:
             import torch
             self.device = torch.device("cuda" if torch.cuda.is_available() and getattr(encoder, "use_gpu", False) else "cpu")
             self.abmil = GatedAttentionMIL(input_dim=encoder.embedding_dim).to(self.device)
-            ckpt_path = "checkpoints/abmil_multi_task.pt"
+            ckpt_path = os.path.join(checkpoint_dir, "abmil_multi_task.pt")
             if os.path.exists(ckpt_path):
                 state = torch.load(ckpt_path, map_location=self.device, weights_only=True)
                 if 'mil' in state:
@@ -119,6 +119,16 @@ class NavigationAgent:
                     "x": x, "y": y, "level": level, "feat": feat
                 })
         # 2. Score patches using ABMIL
+        if not extracted_patches:
+            logger.warning("No tissue patches extracted. Returning empty navigation result.")
+            return NavigationResult(
+                selected_patches=[],
+                importance_map=self._build_importance_map([], rows=16, cols=16),
+                diagnostic_regions=[],
+                magnification_levels_used=self.cfg.magnification_levels,
+                top_patch_count=0
+            )
+
         if self.abmil is None:
             raise RuntimeError("ABMIL model is missing, cannot score patches.")
             
@@ -127,13 +137,13 @@ class NavigationAgent:
             feats_t = torch.tensor([p["feat"] for p in extracted_patches], dtype=torch.float32).unsqueeze(0).to(self.device)
             _, attn = self.abmil(feats_t)
             # Normalize attention to [0, 1] range for importance scores
-            attn_scores = attn.squeeze(0)
+            attn_scores = attn.view(-1)
             if len(attn_scores) > 0:
                 attn_scores = (attn_scores - attn_scores.min()) / (attn_scores.max() - attn_scores.min() + 1e-8)
             attn_scores = attn_scores.cpu().numpy()
             
         for p, score in zip(extracted_patches, attn_scores):
-            score = round(float(score), 4)
+            score = round(float(score.item()), 4)
             patch_obj = PatchCoordinate(
                 x=p["x"], y=p["y"], level=p["level"],
                 width=self.cfg.patch_size, height=self.cfg.patch_size,

@@ -81,9 +81,12 @@ class HistopathologyPipeline:
         # Layer 1
         self.router = RouterAgent(cfg.router, encoder)
 
+        # Extract the global checkpoint dir (defaults to "checkpoints" if missing)
+        ckpt_dir = getattr(cfg.training, "checkpoint_dir", "checkpoints")
+
         # Layer 2
         normalizer = build_normalizer(cfg.qc.stain_normalizer) if hasattr(cfg.qc, "stain_normalizer") else None
-        self.navigation_agent = NavigationAgent(cfg.navigation, encoder, normalizer=normalizer)
+        self.navigation_agent = NavigationAgent(cfg.navigation, encoder, normalizer=normalizer, checkpoint_dir=ckpt_dir)
         self.segmentation_agent = SegmentationAgent(cfg.segmentation, normalizer=normalizer)
         self.description_agent = DescriptionAgent(cfg.description, vlm, normalizer=normalizer)
 
@@ -104,7 +107,7 @@ class HistopathologyPipeline:
                 json.dump({"documents": [], "cases": []}, f)
 
         rag_store = RAGStore(knowledge_base_path=kb_path)
-        self.molecular_agent = MolecularPredictionAgent(cfg.molecular, conch_encoder)
+        self.molecular_agent = MolecularPredictionAgent(cfg.molecular, conch_encoder, checkpoint_dir=ckpt_dir)
         self.clinical_context_agent = ClinicalContextAgent(encoder=conch_encoder)
         self.knowledge_agent = KnowledgeRetrievalAgent(cfg.rag, store=rag_store)
         self.radiology_agent = RadiologyPathologyAgent()
@@ -115,7 +118,7 @@ class HistopathologyPipeline:
         self.calibrator = ConfidenceCalibrator(cfg.verification)
 
         # Layer 5
-        self.diagnosis_agent = DiagnosisAgent()
+        self.diagnosis_agent = DiagnosisAgent(cfg=cfg.training)
         self.explanation_agent = ExplanationAgent()
         self.report_agent = ReportAgent()
 

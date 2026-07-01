@@ -62,8 +62,8 @@ def _build_differentials(
     if mol.msi_status == MSIStatus.MSI_HIGH:
         diffs.append("MSI-H / dMMR gastric adenocarcinoma (pembrolizumab eligible)")
         
-    import numpy as np
-    ebv_prob = float(np.squeeze(mol.ebv_probability.detach().cpu().numpy())) if hasattr(mol.ebv_probability, "detach") else float(np.squeeze(mol.ebv_probability))
+    # mol.ebv_probability is guaranteed to be a Python float from MolecularPredictionAgent
+    ebv_prob = float(mol.ebv_probability)
 
     if ebv_prob > 0.40:
         diffs.append("EBV-associated gastric carcinoma (lymphoepithelioma-like)")
@@ -84,12 +84,17 @@ class DiagnosisAgent:
     Outputs: Diagnosis
     """
 
-    def __init__(self, use_gpu: bool = True):
+    def __init__(self, use_gpu: bool = True, cfg=None):
         try:
             import torch
             from hakim_ai.models.grade_classifier import HistologicalGradeClassifier
             self.device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
-            self.grade_model = HistologicalGradeClassifier.load_model("checkpoints/grade_classifier.pt", device=self.device)
+            import os
+            base_ckpt_dir = "checkpoints"
+            if cfg is not None:
+                base_ckpt_dir = getattr(cfg, "checkpoint_dir", "checkpoints")
+            ckpt_path = os.path.join(base_ckpt_dir, "grade_classifier.pt")
+            self.grade_model = HistologicalGradeClassifier.load_model(ckpt_path, device=self.device)
         except ImportError:
             self.grade_model = None
             self.device = None
