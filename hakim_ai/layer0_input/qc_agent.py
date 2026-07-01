@@ -49,6 +49,20 @@ class QCAgent:
     def run(self, wsi_data: WSIData) -> QCResult:
         logger.info("QC started for patient %s", wsi_data.patient_id)
 
+        if not getattr(self.cfg, "qc_enabled", True):
+            logger.info("QC is disabled; bypassing checks.")
+            return QCResult(
+                passed=True,
+                stain_quality_score=1.0,
+                focus_quality_score=1.0,
+                coverage_score=1.0,
+                tissue_area_mm2=0.0,
+                artifacts_detected=[],
+                rejection_reason=None,
+                normalized_wsi_path=wsi_data.wsi_path,
+                raw_metrics={}
+            )
+
         # 1. Stain normalization (modifies file on disk in real impl)
         normalized_path = self._normalizer.normalize(wsi_data.wsi_path)
 

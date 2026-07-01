@@ -47,8 +47,8 @@ def main():
         
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, collate_fn=collate_mil_bags)
     
-    # Initialize Models (Assuming embed_dim=1536 from UNI2)
-    embed_dim = 1536
+    # Dynamic dimension based on configured encoder
+    embed_dim = 1536 if cfg.foundation_models.patch_encoder == "uni2" else 512
     mil = GatedAttentionMIL(input_dim=embed_dim, hidden_dim=256).to(device)
     head = MultiTaskHead(input_dim=embed_dim).to(device)
     
@@ -91,8 +91,7 @@ def main():
     print("Calibration Results:", results)
     
     # Add other defaults that might not be calibrated by ROC curve
-    if "her2_threshold" not in results:
-        results["her2_threshold"] = 0.5
+
     if "ood_threshold" not in results:
         results["ood_threshold"] = 0.25
     

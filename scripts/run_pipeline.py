@@ -84,7 +84,11 @@ def main() -> int:
     if args.config:
         cfg = PipelineConfig.from_yaml(args.config)
     else:
-        cfg = PipelineConfig.default()
+        is_kaggle = os.environ.get("KAGGLE_KERNEL_RUN_TYPE") or os.path.exists("/kaggle/working")
+        if is_kaggle and os.path.exists("config/kaggle.yaml"):
+            cfg = PipelineConfig.from_yaml("config/kaggle.yaml")
+        else:
+            cfg = PipelineConfig.default()
     if args.output_dir is not None:
         cfg.ui.output_dir = args.output_dir
     cfg.log_level = args.log_level

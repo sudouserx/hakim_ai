@@ -42,6 +42,7 @@ class OpenSlideWSILoader(BaseWSILoader):
     """
     Real WSI loader using openslide-python.
 
+    Requires system dependency `openslide-tools` (e.g., `apt-get install openslide-tools`).
     Reads level dimensions, extracts a thumbnail, and records tile metadata.
     Does NOT load all tiles into memory — downstream agents extract patches
     on demand via patch coordinates.

@@ -36,8 +36,8 @@ def train_mil(cfg: PipelineConfig):
         
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True, collate_fn=collate_mil_bags)
     
-    # Example for UNI2 dimensions (1536)
-    embed_dim = 1536
+    # Dynamic dimension based on configured encoder
+    embed_dim = 1536 if cfg.foundation_models.patch_encoder == "uni2" else 512
     mil = GatedAttentionMIL(input_dim=embed_dim, hidden_dim=256).to(device)
     model = MultiTaskHead(input_dim=embed_dim).to(device)
     

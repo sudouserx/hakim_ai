@@ -35,14 +35,15 @@ class SegformerAdapter:
     def load(self):
             
         try:
+            if not os.path.exists(self.checkpoint_path):
+                raise FileNotFoundError(f"SegFormer checkpoint not found at {self.checkpoint_path}")
             from transformers import SegformerForSemanticSegmentation
             self.model = SegformerForSemanticSegmentation.from_pretrained(
                 "nvidia/mit-b0",
                 num_labels=self.num_classes,
                 ignore_mismatched_sizes=True
             ).to(self.device)
-            if os.path.exists(self.checkpoint_path):
-                self.model.load_state_dict(torch.load(self.checkpoint_path, map_location=self.device, weights_only=True))
+            self.model.load_state_dict(torch.load(self.checkpoint_path, map_location=self.device, weights_only=True))
             self.model.eval()
             logger.info("Loaded SegFormer segmentation model")
         except Exception as e:
@@ -62,7 +63,7 @@ class SegformerAdapter:
         Returns: (H, W) array of class indices.
         """
         if self.model is None or patch is None:
-            raise RuntimeError("Segformer model is not loaded or patch is None.")
+            logger.warning("Segformer model is not loaded or patch is None. Using fallback stroma mask.")
             w, h = patch.size if hasattr(patch, "size") else (512, 512)
             return np.full((h, w), 2, dtype=np.uint8)
             

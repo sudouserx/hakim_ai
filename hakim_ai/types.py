@@ -222,7 +222,6 @@ class EvidenceBundle:
     navigation: NavigationResult
     segmentation: TissueSegmentation
     descriptions: List[PatchDescription]
-    patch_feature_vectors: Dict[str, List[float]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -362,8 +361,8 @@ class PipelineResult:
     """Complete output of the end-to-end pipeline run."""
     patient_id: str
     run_id: Optional[str]
-    qc_result: QCResult
-    router_decision: RouterDecision
+    qc_result: Optional[QCResult] = None
+    router_decision: Optional[RouterDecision] = None
     evidence: Optional[EvidenceBundle] = None
     fusion: Optional[FusionResult] = None
     verification: Optional[VerificationResult] = None

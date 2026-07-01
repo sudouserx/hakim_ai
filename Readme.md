@@ -16,7 +16,7 @@
 - **Moderate AI saturation** — explainable AI lags far behind breast/lung cancer
 - **Multiple tractable H&E tasks**: subtype (Lauren), MSI/dMMR prediction, EBV detection
 - **Rich public multimodal data**: TCGA-STAD, GasHisSDB, GCHTID with TME annotations
-- **Clear clinical value**: MSI-H predicts pembrolizumab eligibility; HER2+ predicts trastuzumab benefit
+- **Clear clinical value**: MSI-H predicts pembrolizumab eligibility
 
 ### Architecture at a glance
 
@@ -67,9 +67,10 @@
 
 ### Install
 
-For Kaggle or similar environments, you must install the system prerequisites first:
+For Kaggle or similar environments (ensure Internet is toggled ON), you must install the system prerequisites and model dependencies first:
 ```bash
 apt-get update && apt-get install -y openslide-tools unrar
+pip install "hakim_ai[models]"
 ```
 
 ### Install Python Dependencies
@@ -88,8 +89,8 @@ The pipeline includes an automated data manager to acquire and preprocess datase
 # Download and prepare all datasets (TCGA-STAD, GasHisSDB, GCHTID)
 python scripts/prepare_data.py --all
 
-# Download a specific dataset
-python scripts/prepare_data.py --dataset tcga-stad
+# Download a specific dataset (use --max-slides on Kaggle to avoid filling scratch space)
+python scripts/prepare_data.py --dataset tcga-stad --max-slides 50
 
 # Preview operations without downloading
 python scripts/prepare_data.py --all --dry-run
@@ -114,7 +115,7 @@ python scripts/run_pipeline.py \
     --config config/kaggle.yaml \
     --patient-id TCGA-BR-4253 \
     --wsi-path /data/slides/TCGA-BR-4253.svs \
-    --radiology-path /data/dicom/CT_study.dcm \
+    --radiology /data/dicom/CT_study.dcm \
     --age 67 --sex M \
     --biopsy-location antrum \
     --h-pylori \

@@ -5,9 +5,28 @@ Implements a Hybrid CNN-Transformer or a simple multi-layer perceptron over patc
 from __future__ import annotations
 
 import os
-import torch
-import torch.nn as nn
-from typing import Optional
+from typing import Optional, Any
+try:
+    import torch
+    import torch.nn as nn
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    class DummyNN:
+        class Module:
+            pass
+        class Sequential:
+            pass
+        class Linear:
+            pass
+        class BatchNorm1d:
+            pass
+        class ReLU:
+            pass
+        class Dropout:
+            pass
+    nn = DummyNN()
+    torch = None
 
 from hakim_ai.utils.logging_utils import get_logger
 
@@ -42,11 +61,11 @@ class HistologicalGradeClassifier(nn.Module):
             "poorly differentiated (Grade 3)"
         ]
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: 'torch.Tensor') -> 'torch.Tensor':
         return self.classifier(x)
 
     @classmethod
-    def load_model(cls, checkpoint_path: str, input_dim: int = 1536, device: torch.device = torch.device("cpu")) -> Optional["HistologicalGradeClassifier"]:
+    def load_model(cls, checkpoint_path: str, input_dim: int = 1536, device: Any = None) -> Optional["HistologicalGradeClassifier"]:
         """Load trained model weights."""
         model = cls(input_dim=input_dim).to(device)
         if os.path.exists(checkpoint_path):
@@ -58,11 +77,10 @@ class HistologicalGradeClassifier(nn.Module):
             except Exception as e:
                 logger.error(f"Failed to load GradeClassifier weights: {e}")
                 return None
-        logger.warning(f"GradeClassifier checkpoint not found at {checkpoint_path}. Using uninitialized model.")
-        model.eval()
-        return model
+        logger.warning(f"GradeClassifier checkpoint not found at {checkpoint_path}. Grade classification will fail loudly.")
+        return None
 
-    def predict_grade(self, feature_vector: list[float], device: torch.device) -> str:
+    def predict_grade(self, feature_vector: list[float], device: Any) -> str:
         """Predict grade string from a single feature vector."""
         with torch.no_grad():
             x = torch.tensor(feature_vector, dtype=torch.float32).unsqueeze(0).to(device)

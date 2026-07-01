@@ -46,7 +46,7 @@ class GatedAttentionMIL(nn.Module):
         )
         self.attention_weights = nn.Linear(self.D, self.K)
 
-    def forward(self, x: torch.Tensor, mask: torch.Tensor = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: 'torch.Tensor', mask: 'torch.Tensor' = None) -> Tuple['torch.Tensor', 'torch.Tensor']:
         """
         x: (B, N, L)
         mask: (B, N) boolean mask where True means valid patch
@@ -57,6 +57,8 @@ class GatedAttentionMIL(nn.Module):
         A_V = self.attention_V(x)  # (B, N, D)
         A_U = self.attention_U(x)  # (B, N, D)
         A = self.attention_weights(A_V * A_U)  # (B, N, K)
+        if mask is not None:
+            A = A.masked_fill(~mask.unsqueeze(-1), float('-inf'))
         A = torch.softmax(A, dim=1)  # (B, N, K)
         
         # A: (B, N, K) -> (B, K, N)

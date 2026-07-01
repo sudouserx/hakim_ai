@@ -39,14 +39,10 @@ class StainNormalizerMacenko:
     def normalize(self, wsi_path: str) -> str:
         """
         Normalise a WSI and return the path to the normalised file.
-        Stub: returns a tagged path. Real normalization of whole WSIs is out of scope 
-        for this pipeline (usually done patch-by-patch).
+        Real normalization of whole WSIs is out of scope for this pipeline 
+        (usually done patch-by-patch). Returning original path.
         """
-        if wsi_path.endswith("_normalized.svs"):
-            return wsi_path  # already normalised
-        return wsi_path.replace(".svs", "_normalized.svs").replace(
-            ".ndpi", "_normalized.ndpi"
-        ).replace(".tiff", "_normalized.tiff") or f"{wsi_path}_normalized"
+        return wsi_path
 
     def normalize_patch(self, patch: Any) -> Any:
         """Normalises a patch (PIL Image or nested list) in-place/returned."""
@@ -116,7 +112,7 @@ class StainNormalizerReinhard:
     """Reinhard colour transfer implementation."""
     
     def normalize(self, wsi_path: str) -> str:
-        return f"{wsi_path}_reinhard_normalized"
+        return wsi_path
 
     def normalize_patch(self, patch: Any) -> Any:
         if isinstance(patch, list):

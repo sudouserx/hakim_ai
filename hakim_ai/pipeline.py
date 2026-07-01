@@ -17,13 +17,13 @@ Design principles enforced here:
   - Every layer failure is caught and surfaced in PipelineResult.error
   - Benign fast-path: abbreviated workflow for clearly benign cases
   - Abstention: low-confidence cases escalate before diagnosis is emitted
-  - Layer 2 agents run sequentially (models assumed persistently managed)
+  - Layer 2 agents run sequentially to manage VRAM
 """
 from __future__ import annotations
 
 import time
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from hakim_ai.config import PipelineConfig
 from hakim_ai.foundation_models import build_patch_encoder, build_vlm
@@ -92,7 +92,7 @@ class HistopathologyPipeline:
 
         # Layer 3
         from hakim_ai.foundation_models.conch_adapter import CONCHEncoder
-        conch_encoder = CONCHEncoder()
+        conch_encoder = CONCHEncoder(use_gpu=cfg.foundation_models.use_gpu)
         
         if not cfg.rag.knowledge_base_path:
             # Fallback path if none provided but store is needed
@@ -107,7 +107,7 @@ class HistopathologyPipeline:
                 json.dump({"documents": [], "cases": []}, f)
 
         rag_store = RAGStore(knowledge_base_path=kb_path)
-        self.molecular_agent = MolecularPredictionAgent(cfg.molecular, conch_encoder, checkpoint_dir=ckpt_dir)
+        self.molecular_agent = MolecularPredictionAgent(cfg.molecular, encoder, checkpoint_dir=ckpt_dir)
         self.clinical_context_agent = ClinicalContextAgent(encoder=conch_encoder)
         self.knowledge_agent = KnowledgeRetrievalAgent(cfg.rag, store=rag_store)
         self.radiology_agent = RadiologyPathologyAgent()
@@ -217,12 +217,8 @@ class HistopathologyPipeline:
                 return result
 
             # ── Layer 2: Evidence Collection (sequential) ─────────────────── #
-            # Models are assumed to be persistently loaded and managed by an
-            # external inference server or initialised once at pipeline
-            # construction.  No manual .load() / .unload() cycling — this
-            # avoids GPU thrashing from moving weights in and out of VRAM.
             # Agents run sequentially on the main thread to avoid GIL
-            # bottlenecks and CUDA context collisions from ThreadPoolExecutor.
+            # bottlenecks and manage VRAM usage.
             nav_result = self.navigation_agent.run(wsi_data, qc_result)
             self._unload_model(self.navigation_agent)
             if hasattr(self.router, "encoder"):
@@ -297,10 +293,7 @@ class HistopathologyPipeline:
                 except Exception as e:
                     self._logger.warning(f"Failed to close slide handle: {e}")
 
-    # NOTE: _cleanup_gpu() has been intentionally removed.
-    # Aggressive gc.collect() + torch.cuda.empty_cache() between every agent
-    # step caused GPU thrashing.  Models are now assumed to be persistently
-    # managed (either loaded once at init or served by an inference server).
+
 
     # ------------------------------------------------------------------
     # Layer 6 helpers (called explicitly by the user/CLI after run())

@@ -13,7 +13,9 @@ from typing import Any, Dict, List, Optional
 import os
 import logging
 
-if os.path.exists("/kaggle/tmp"):
+is_kaggle = os.environ.get("KAGGLE_KERNEL_RUN_TYPE") or os.path.exists("/kaggle/working")
+if is_kaggle:
+    os.makedirs("/kaggle/tmp", exist_ok=True)
     os.environ.setdefault("HF_HOME", "/kaggle/tmp/huggingface")
 
 logger = logging.getLogger(__name__)
@@ -77,7 +79,6 @@ class SegmentationConfig:
 
 @dataclass
 class DescriptionConfig:
-    vlm_model: str = "pathchat"   # "pathchat" | "conch"
     max_patches_to_describe: int = 5
     max_tokens: int = 256
 
@@ -86,7 +87,6 @@ class DescriptionConfig:
 class MolecularConfig:
     model: str = "multi_task_head"
     msi_threshold: float = 0.53
-    her2_threshold: float = 0.5
     ebv_threshold: float = 0.48
 
 
@@ -100,6 +100,7 @@ class RAGConfig:
 
 @dataclass
 class VerificationConfig:
+    calibrated: bool = False
     temperature: float = 1.5           # temperature scaling for calibration
     abstention_threshold: float = 0.35
     ood_threshold: float = 0.25
@@ -151,6 +152,7 @@ class FoundationModelConfig:
 @dataclass
 class UIConfig:
     output_dir: str = "outputs"
+    feedback_db_path: str = "feedback.db"
     html_report: bool = True
     mdt_export: bool = True
 
@@ -165,6 +167,7 @@ class PipelineConfig:
     pipeline_name: str = "histopath_ai_gastric"
     version: str = "0.1.0"
     log_level: str = "INFO"
+    output_dir: str = "outputs"
 
     qc: QCConfig = field(default_factory=QCConfig)
     router: RouterConfig = field(default_factory=RouterConfig)
@@ -188,12 +191,35 @@ class PipelineConfig:
     def from_yaml(cls, path: str | Path) -> "PipelineConfig":
         if not _YAML_AVAILABLE:
             raise ImportError("Install pyyaml: pip install pyyaml")
+            
+        cfg = cls()
+        default_path = Path("config/default.yaml")
+        if default_path.exists() and Path(path).resolve() != default_path.resolve():
+            with open(default_path) as fh:
+                default_raw = yaml.safe_load(fh) or {}
+            cfg = cls._from_dict(default_raw, base_cfg=cfg)
+            
         with open(path) as fh:
             raw: Dict[str, Any] = yaml.safe_load(fh) or {}
-        return cls._from_dict(raw)
+            
+        if Path("thresholds.json").exists():
+            import json
+            try:
+                with open("thresholds.json") as f:
+                    thresholds = json.load(f)
+                if "molecular" not in raw:
+                    raw["molecular"] = {}
+                if "msi_threshold" in thresholds:
+                    raw["molecular"]["msi_threshold"] = thresholds["msi_threshold"]
+                if "ebv_threshold" in thresholds:
+                    raw["molecular"]["ebv_threshold"] = thresholds["ebv_threshold"]
+            except Exception as e:
+                logger.warning(f"Failed to load thresholds.json: {e}")
+                
+        return cls._from_dict(raw, base_cfg=cfg)
 
     @classmethod
-    def _from_dict(cls, d: Dict[str, Any]) -> "PipelineConfig":
+    def _from_dict(cls, d: Dict[str, Any], base_cfg: Optional["PipelineConfig"] = None) -> "PipelineConfig":
         """Shallow merge: top-level keys override defaults; sub-dicts merge field by field."""
         sub_config_map: Dict[str, type] = {
             "qc": QCConfig,
@@ -209,7 +235,7 @@ class PipelineConfig:
             "training": TrainingConfig,
             "data": DataConfig,
         }
-        cfg = cls()
+        cfg = base_cfg if base_cfg is not None else cls()
         for key, val in d.items():
             if key in sub_config_map:
                 sub_obj = getattr(cfg, key)

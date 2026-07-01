@@ -10,6 +10,7 @@ qc:
   qc_enabled: false
   min_focus_quality: 0.0
   min_coverage: 0.0
+  min_stain_quality: 0.0
   reject_on_artifact: false
 
 foundation_models:

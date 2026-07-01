@@ -30,6 +30,13 @@ class CONCHEncoder(BaseEncoder):
         self.model_variant = model_variant
         self.use_gpu = use_gpu
         self._model = None
+        self.device = "cpu"
+        try:
+            import torch
+            if self.use_gpu and torch.cuda.is_available():
+                self.device = "cuda"
+        except ImportError:
+            pass
 
     @property
     def embedding_dim(self) -> int:
@@ -141,7 +148,7 @@ class CONCHEncoder(BaseEncoder):
             vision_state_dict = {k.replace('visual.', ''): v for k, v in state_dict.items() if k.startswith('visual.')}
             if not vision_state_dict:
                 vision_state_dict = state_dict
-            self._model.load_state_dict(vision_state_dict, strict=False)
+            self._model.load_state_dict(vision_state_dict, strict=True)
         except Exception as e:
             raise RuntimeError(f"Failed to download CONCH weights: {e}") from e
             
@@ -232,9 +239,7 @@ class PathChatVLM(BaseVLM):
                 device_map="auto"
             )
         except Exception as e:
-            print(f"Warning: Failed to load VLM model: {e}")
-            self._model = None
-            self._processor = None
+            raise RuntimeError(f"Failed to load VLM model: {e}") from e
 
     def _real_describe(self, patch: Any, prompt: str) -> str:
         if self._model is None or self._processor is None:

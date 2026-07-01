@@ -39,7 +39,7 @@ class MultiTaskHead(nn.Module):
         self.ebv_head = nn.Linear(512, 1)        # Binary
         self.lauren_head = nn.Linear(512, 3)     # 3 classes: intestinal, diffuse, mixed
 
-    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def forward(self, x: 'torch.Tensor') -> Dict[str, 'torch.Tensor']:
         # x is now (B, 3, L) representing 3 task-specific attention heads
         
         if x.dim() == 2:
