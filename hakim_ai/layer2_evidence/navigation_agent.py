@@ -148,7 +148,7 @@ class NavigationAgent:
             feats_t = torch.tensor([p["feat"] for p in extracted_patches], dtype=torch.float32).unsqueeze(0).to(self.device)
             _, attn = self.abmil(feats_t)
             # Normalize attention to [0, 1] range for importance scores
-            attn_scores = attn.view(-1)
+            attn_scores = attn.reshape(-1)
             if len(attn_scores) > 0:
                 attn_scores = (attn_scores - attn_scores.min()) / (attn_scores.max() - attn_scores.min() + 1e-8)
             attn_scores = attn_scores.cpu().numpy()
