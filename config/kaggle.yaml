@@ -25,6 +25,16 @@ description:
 
 data:
   data_root: /kaggle/tmp/data/
+  tcga_stad_url: "https://www.cancerimagingarchive.net/collection/tcga-stad/"
+  gashis_url: "https://figshare.com/ndownloader/files/28969725"
+  gchtid_url: "https://figshare.com/ndownloader/files/46765759"
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  gashis_patch_sizes: [160]
+  max_retries: 3
+  chunk_size_mb: 8
+  verify_checksums: true
   
 training:
   tcga_data_root: /kaggle/tmp/data/tcga-stad/

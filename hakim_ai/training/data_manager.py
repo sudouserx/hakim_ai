@@ -185,25 +185,34 @@ class TCGAStadHandler(BaseDatasetHandler):
         return []
 
     def _fetch_cbio_clinical(self, study_id: str, data_type: str = "PATIENT") -> pd.DataFrame:
-        url = f"https://www.cbioportal.org/api/studies/{study_id}/clinical-data?clinicalDataType={data_type}"
-        response = self.session.get(url)
-        if response.status_code != 200:
-            logger.warning(f"Failed to fetch {study_id} from cBioPortal: {response.status_code}")
-            return pd.DataFrame()
+        # The public cBioPortal API is heavily rate-limited and often returns 503 for full clinical data.
+        # Fetch directly from the cBioPortal datahub GitHub repository.
+        file_suffix = "patient" if data_type == "PATIENT" else "sample"
+        url = f"https://github.com/cBioPortal/datahub/raw/master/public/{study_id}/data_clinical_{file_suffix}.txt"
         
-        data = response.json()
-        if not data:
+        try:
+            # pandas handles the 302 redirect from github raw to the LFS media file
+            df = pd.read_csv(url, sep='\t', comment='#')
+        except Exception as e:
+            logger.warning(f"Failed to fetch {study_id} from cBioPortal datahub: {e}")
             return pd.DataFrame()
             
-        df = pd.DataFrame(data)
-        idx_col = "patientId" if data_type == "PATIENT" else "sampleId"
-        df_pivot = df.pivot(index=idx_col, columns='clinicalAttributeId', values='value').reset_index()
-        
-        # If it's sample data, we typically want patientId as well. In TCGA, sampleId is roughly patientId + suffix
-        if data_type == "SAMPLE" and "sampleId" in df_pivot.columns:
-            # e.g., TCGA-BR-4187-01
-            df_pivot['patientId'] = df_pivot['sampleId'].str.extract(r'(TCGA-[A-Z0-9]{2}-[A-Z0-9]{4})')[0]
-        return df_pivot
+        if df.empty:
+            return pd.DataFrame()
+            
+        # Rename IDs to match what the rest of the code expects
+        if data_type == "PATIENT" and "PATIENT_ID" in df.columns:
+            df = df.rename(columns={"PATIENT_ID": "patientId"})
+        elif data_type == "SAMPLE":
+            if "SAMPLE_ID" in df.columns:
+                df = df.rename(columns={"SAMPLE_ID": "sampleId"})
+            if "PATIENT_ID" in df.columns:
+                df = df.rename(columns={"PATIENT_ID": "patientId"})
+            elif "sampleId" in df.columns:
+                # e.g., TCGA-BR-4187-01
+                df['patientId'] = df['sampleId'].str.extract(r'(TCGA-[A-Z0-9]{2}-[A-Z0-9]{4})')[0]
+                
+        return df
 
     def _build_clinical_manifest(self) -> pd.DataFrame:
         # Fetch stad_tcga (Demographics)
@@ -239,7 +248,7 @@ class TCGAStadHandler(BaseDatasetHandler):
         manifest['her2_status'] = 'unknown'
 
         # Fill NaNs with 'unknown'
-        manifest.fillna('unknown', inplace=True)
+        manifest = manifest.astype(object).fillna('unknown')
         return manifest
 
     def _save_provenance(self, df: pd.DataFrame):
