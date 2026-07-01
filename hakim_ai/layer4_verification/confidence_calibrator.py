@@ -131,6 +131,20 @@ class WHOValidator:
 # Confidence Calibrator
 # ---------------------------------------------------------------------------
 
+import numpy as np
+
+def _to_scalar(val) -> float:
+    """Safely extract a pure Python float from a 1D tensor or array."""
+    if hasattr(val, "item"):
+        # PyTorch Tensor or NumPy 0-D array
+        try:
+            return float(val.item())
+        except ValueError:
+            return float(val.squeeze().item())
+    # Fallback for raw numpy arrays
+    return float(np.squeeze(val))
+
+
 def _temperature_scale(logit: float, temperature: float) -> float:
     """Apply temperature scaling: new_prob = sigmoid(logit / T)."""
     return 1.0 / (1.0 + math.exp(-logit / max(temperature, 1e-8)))
@@ -144,10 +158,14 @@ def _estimate_raw_confidence(fusion: FusionResult, evidence: EvidenceBundle) -> 
     diagnosis classifier output. Here we aggregate available signals.
     """
     mol = fusion.molecular
+    msi_prob = _to_scalar(mol.msi_probability)
+    lauren_conf = _to_scalar(mol.lauren_confidence)
+    her2_prob = _to_scalar(mol.her2_probability)
+
     signals = [
-        mol.msi_probability if mol.msi_probability > 0.5 else 1.0 - mol.msi_probability,
-        mol.lauren_confidence,
-        mol.her2_probability if mol.her2_probability > 0.5 else 1.0 - mol.her2_probability,
+        msi_prob if msi_prob > 0.5 else 1.0 - msi_prob,
+        lauren_conf,
+        her2_prob if her2_prob > 0.5 else 1.0 - her2_prob,
     ]
     # Average patch description confidence
     if evidence.descriptions:
@@ -194,7 +212,8 @@ def _detect_ood(fusion: FusionResult, evidence: EvidenceBundle, temperature: flo
         if logits:
             energies = []
             for l in logits:
-                half_l = l / 2.0
+                l_val = _to_scalar(l)
+                half_l = l_val / 2.0
                 m = abs(half_l)
                 # log(e^(half_l/T) + e^(-half_l/T)) = m/T + log(1.0 + math.exp(-2.0 * m / temperature))
                 lse = m / temperature + math.log(1.0 + math.exp(-2.0 * m / temperature))
@@ -213,9 +232,10 @@ def _detect_ood(fusion: FusionResult, evidence: EvidenceBundle, temperature: flo
             if energy > max_energy - scaled_threshold:
                 return True, f"high_energy_feature_ambiguity (energy={energy:.2f})"
                 
+    msi_prob = _to_scalar(mol.msi_probability)
     if max(
-        mol.msi_probability,
-        1 - mol.msi_probability,
+        msi_prob,
+        1 - msi_prob,
     ) < 0.6:
         return True, "feature_ambiguity"
     return False, None

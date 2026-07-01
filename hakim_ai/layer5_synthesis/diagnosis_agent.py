@@ -61,7 +61,11 @@ def _build_differentials(
     # MSI-H opens immunotherapy pathway — worth listing
     if mol.msi_status == MSIStatus.MSI_HIGH:
         diffs.append("MSI-H / dMMR gastric adenocarcinoma (pembrolizumab eligible)")
-    if mol.ebv_probability > 0.40:
+        
+    import numpy as np
+    ebv_prob = float(np.squeeze(mol.ebv_probability.detach().cpu().numpy())) if hasattr(mol.ebv_probability, "detach") else float(np.squeeze(mol.ebv_probability))
+
+    if ebv_prob > 0.40:
         diffs.append("EBV-associated gastric carcinoma (lymphoepithelioma-like)")
     if mol.her2_status == HER2Status.POSITIVE:
         diffs.append("HER2-positive gastric adenocarcinoma (trastuzumab eligible)")
@@ -160,7 +164,12 @@ class DiagnosisAgent:
                 if getattr(p, "feature_vector", None) is not None
             ]
             if features:
-                mean_feat = np.mean(features, axis=0).tolist()
+                # Safely move elements to CPU and convert to numpy
+                features_safe = [
+                    f.detach().cpu().numpy() if hasattr(f, "detach") else f 
+                    for f in features
+                ]
+                mean_feat = np.mean(features_safe, axis=0).tolist()
                 grade = self.grade_model.predict_grade(mean_feat, self.device)
                 logger.info("Grade determined by ML model: %s", grade)
                 return grade

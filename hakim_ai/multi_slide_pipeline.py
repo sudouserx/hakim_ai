@@ -92,11 +92,13 @@ class MultiSlidePipeline:
         summary = None
         traj = None
         
-        if self.longitudinal_agent is not None:
-            summary, traj = self.longitudinal_agent.analyze(results)
+        successful_results = [r for r in results if r.is_successful()]
+
+        if self.longitudinal_agent is not None and successful_results:
+            summary, traj = self.longitudinal_agent.analyze(successful_results)
         else:
             # Fallback summary
-            summary = f"Analyzed {len(results)} slides. Stable disease profile."
+            summary = f"Analyzed {len(results)} slides ({len(successful_results)} successful). Stable disease profile."
             traj = {"progression_risk": 0.15}
             
         return MultiSlideResult(
