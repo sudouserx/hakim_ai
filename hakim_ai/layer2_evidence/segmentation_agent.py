@@ -58,6 +58,17 @@ class SegmentationAgent:
             except ImportError:
                 logger.warning("Torch not available; segmentation model disabled.")
 
+    def unload(self) -> None:
+        if getattr(self, "seg_model", None) is not None:
+            if hasattr(self.seg_model, "unload"):
+                self.seg_model.unload()
+            self.seg_model = None
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
     def run(
         self, wsi_data: WSIData, navigation: NavigationResult
     ) -> TissueSegmentation:

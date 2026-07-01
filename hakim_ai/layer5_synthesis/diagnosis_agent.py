@@ -99,6 +99,16 @@ class DiagnosisAgent:
             self.grade_model = None
             self.device = None
 
+    def unload(self) -> None:
+        if getattr(self, "grade_model", None) is not None:
+            del self.grade_model
+            self.grade_model = None
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
     # Safe abstention string for T-staging.  T-stage is determined by
     # invasion depth through anatomical layers (mucosa → serosa), which
     # cannot be inferred from 2D tumour area fraction on H&E patches.

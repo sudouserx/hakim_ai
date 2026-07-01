@@ -76,6 +76,11 @@ class DescriptionAgent:
         self.vlm = vlm
         self.normalizer = normalizer
 
+    def unload(self) -> None:
+        if getattr(self, "vlm", None) is not None:
+            if hasattr(self.vlm, "unload"):
+                self.vlm.unload()
+
     def run(
         self, wsi_data: WSIData, navigation: NavigationResult
     ) -> List[PatchDescription]:

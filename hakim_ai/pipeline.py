@@ -168,6 +168,11 @@ class HistopathologyPipeline:
     # Layer execution
     # ------------------------------------------------------------------
 
+    def _unload_model(self, obj: Any) -> None:
+        """Call unload() on an object if parallel multi-slide is disabled to save VRAM."""
+        if not self.config.parallel_multi_slide and hasattr(obj, "unload"):
+            obj.unload()
+
     def _run_layers(
         self,
         inp: PipelineInput,
@@ -176,10 +181,11 @@ class HistopathologyPipeline:
     ) -> PipelineResult:
 
         # ── Layer 0: Input & QC ─────────────────────────────────────── #
-        wsi_data = self.wsi_loader.load(inp.wsi_input)
-        clinical_data = self.clinical_loader.load(inp.clinical_input)
-
+        wsi_data = None
         try:
+            wsi_data = self.wsi_loader.load(inp.wsi_input)
+            clinical_data = self.clinical_loader.load(inp.clinical_input)
+
             qc_result = self.qc_agent.run(wsi_data)
             result.qc_result = qc_result
 
@@ -218,8 +224,17 @@ class HistopathologyPipeline:
             # Agents run sequentially on the main thread to avoid GIL
             # bottlenecks and CUDA context collisions from ThreadPoolExecutor.
             nav_result = self.navigation_agent.run(wsi_data, qc_result)
+            self._unload_model(self.navigation_agent)
+            if hasattr(self.router, "encoder"):
+                self._unload_model(self.router.encoder)
+
             seg_result = self.segmentation_agent.run(wsi_data, nav_result)
+            self._unload_model(self.segmentation_agent)
+
             desc_result = self.description_agent.run(wsi_data, nav_result)
+            self._unload_model(self.description_agent)
+            if hasattr(self.description_agent, "vlm"):
+                self._unload_model(self.description_agent.vlm)
 
             evidence = EvidenceBundle(
                 navigation=nav_result,
@@ -230,7 +245,11 @@ class HistopathologyPipeline:
 
             # ── Layer 3: Multimodal Fusion ───────────────────────────────── #
             molecular = self.molecular_agent.run(evidence)
+            self._unload_model(self.molecular_agent)
+            
             clinical_ctx = self.clinical_context_agent.run(clinical_data, evidence)
+            if hasattr(self.clinical_context_agent, "encoder"):
+                self._unload_model(self.clinical_context_agent.encoder)
             knowledge = self.knowledge_agent.run(molecular, evidence)
 
             radiology_findings = None
@@ -264,6 +283,7 @@ class HistopathologyPipeline:
     
             # ── Layer 5: Synthesis & Report ──────────────────────────────── #
             diagnosis = self.diagnosis_agent.run(evidence, fusion, verification, result.router_decision)
+            self._unload_model(self.diagnosis_agent)
             explanation = self.explanation_agent.run(diagnosis, evidence, fusion, verification)
             report = self.report_agent.run(inp, diagnosis, explanation, fusion, verification)
             result.report = report

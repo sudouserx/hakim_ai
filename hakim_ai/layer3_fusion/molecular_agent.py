@@ -79,6 +79,20 @@ class MolecularPredictionAgent:
             except Exception as e:
                 logger.warning(f"Could not load molecular models: {e}")
 
+    def unload(self) -> None:
+        if getattr(self, "abmil", None) is not None or getattr(self, "head", None) is not None:
+            if hasattr(self, "abmil"):
+                del self.abmil
+                self.abmil = None
+            if hasattr(self, "head"):
+                del self.head
+                self.head = None
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
     def run(self, evidence: EvidenceBundle) -> MolecularPrediction:
         logger.info("Molecular prediction started")
 

@@ -68,6 +68,16 @@ class NavigationAgent:
         except Exception as e:
             logger.warning(f"Could not load ABMIL model: {e}")
 
+    def unload(self) -> None:
+        if getattr(self, "abmil", None) is not None:
+            del self.abmil
+            self.abmil = None
+            import gc
+            import torch
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
     def run(self, wsi_data: WSIData, qc_result: QCResult) -> NavigationResult:
         logger.info("Navigation started for patient %s", wsi_data.patient_id)
 
@@ -101,7 +111,7 @@ class NavigationAgent:
                 tissue_mask=tissue_mask,
                 patch_size=self.cfg.patch_size,
                 thumbnail_downsample=thumb_downsample,
-                top_k=max(3, self.cfg.top_k_patches // len(self.cfg.magnification_levels)),
+                top_k=max(1, self.cfg.top_k_patches // len(self.cfg.magnification_levels)),
                 seed=self._rng.randint(0, 10_000),
             )
             for x, y in coords:
