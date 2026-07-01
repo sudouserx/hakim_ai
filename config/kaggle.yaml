@@ -22,6 +22,9 @@ navigation:
 description:
   max_patches_to_describe: 1  # 3
 
+segmentation:
+  checkpoint_path: /kaggle/tmp/checkpoints/segformer_gchtid.pt
+
 
 data:
   data_root: /kaggle/tmp/data/
