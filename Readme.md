@@ -2,113 +2,221 @@
 
 **End-to-end explainable multi-agent histopathology AI for gastric cancer / STAD**
 
-> ⚠️ Research prototype — not approved for clinical diagnostic use without pathologist oversight.
+> [!WARNING]
+> Research prototype — not approved for clinical diagnostic use without pathologist oversight.
 
 ---
 
 ## Overview
 
-`hakim_ai` implements the layered multi-agent architecture described in the research synthesis document, targeting gastric cancer (stomach adenocarcinoma, STAD) as the primary diagnostic domain. It acts as a comprehensive multimodal pipeline capable of integrating whole-slide images (WSI), clinical electronic health records (EHR), radiology imaging (DICOM), and molecular history.
+`hakim_ai` is a production-ready, comprehensive multimodal AI pipeline designed to tackle gastric cancer (stomach adenocarcinoma, STAD). It acts as an expert diagnostic assistant capable of integrating whole-slide images (WSI), clinical electronic health records (EHR), radiology imaging (DICOM), and molecular history.
 
-### Why gastric cancer?
+### Why Gastric Cancer?
 
-- **3rd in global cancer mortality** (GLOBOCAN 2022) with highest burden in Asia-Pacific
-- **Moderate AI saturation** — explainable AI lags far behind breast/lung cancer
-- **Multiple tractable H&E tasks**: subtype (Lauren), MSI/dMMR prediction, EBV detection
-- **Rich public multimodal data**: TCGA-STAD, GasHisSDB, GCHTID with TME annotations
-- **Clear clinical value**: MSI-H predicts pembrolizumab eligibility
+- **3rd in global cancer mortality** (GLOBOCAN 2022) with the highest burden in the Asia-Pacific.
+- **AI saturation** — Explainable AI for gastric cancer lags significantly behind breast and lung cancer.
+- **Multiple tractable H&E tasks**: Subtyping (Lauren classification), MSI/dMMR prediction, and EBV detection.
+- **Clear clinical value**: E.g., MSI-H status predicts pembrolizumab eligibility.
 
-### Architecture at a glance
+### Architecture
 
+The system utilizes a robust 7-layer architecture. Each layer delegates specific responsibilities to domain-focused AI agents, ensuring explainability, verification, and clinical safety.
+
+```mermaid
+graph TD
+    subgraph L0 [Layer 0: Input & QC]
+        WSI[WSI Loader]
+        Clin[Clinical Loader]
+        QC[QC Agent]
+        WSI --> QC
+    end
+
+    subgraph L1 [Layer 1: Router / Triage]
+        Router[Router Agent]
+    end
+    
+    subgraph L2 [Layer 2: Evidence Collection]
+        Nav[Navigation Agent]
+        Seg[Segmentation Agent]
+        Desc[Description Agent]
+        Nav --> Seg
+        Nav --> Desc
+    end
+
+    subgraph L3 [Layer 3: Multimodal Fusion]
+        Mol[Molecular Prediction Agent]
+        ClinCtx[Clinical Context Agent]
+        RAG[Knowledge Retrieval Agent]
+        Rad[Radiology Pathology Agent]
+    end
+
+    subgraph L4 [Layer 4: Verification]
+        Logic[Logic Agent]
+        WHO[WHO Validator]
+        Calib[Confidence Calibrator]
+        Logic --> Calib
+        WHO --> Calib
+    end
+
+    subgraph L5 [Layer 5: Synthesis]
+        Diag[Diagnosis Agent]
+        Exp[Explanation Agent]
+        Rep[Report Agent]
+        Diag --> Exp
+        Exp --> Rep
+    end
+
+    subgraph L6 [Layer 6: Human Interface]
+        UI[UI Renderer]
+        MDT[MDT Exporter]
+    end
+
+    L0 --> L1
+    Clin -.-> ClinCtx
+    L1 -->|Complex Case| L2
+    L1 -.->|Benign Fast-Path| L5
+    L1 -.->|Escalate| L6
+    L2 --> L3
+    L3 --> L4
+    L4 --> L5
+    L5 --> L6
+
+    classDef layer fill:#f8fafc,stroke:#cbd5e1,stroke-width:2px,color:#334155;
+    classDef comp fill:#e0f2fe,stroke:#0ea5e9,stroke-width:1px,color:#0f172a,rx:5px,ry:5px;
+    class L0,L1,L2,L3,L4,L5,L6 layer;
+    class WSI,Clin,QC,Router,Nav,Seg,Desc,Mol,ClinCtx,RAG,Rad,Logic,WHO,Calib,Diag,Exp,Rep,UI,MDT comp;
 ```
-[WSI + EHR + Radiology (optional)]
-        │
-  Layer 0: Input & QC          stain normalisation · artefact detection · dynamic area-based coverage gating
-        │
-  Layer 1: Router / Triage     benign fast-path · complexity scoring · human escalation
-        │
-  Layer 2: Evidence Collection (Sequential)
-        ├── Navigation Agent   K-Means phenotype clustering · importance map · ROI selection
-        ├── Segmentation Agent tissue compartments · TIL density · TME profile
-        └── Description Agent  NL patch descriptions via VLM (PathChat / CONCH)
-        │
-  Layer 3: Multimodal Fusion
-        ├── Molecular Agent    MSI · Lauren · EBV prediction via Multi-Head Attention MIL
-        ├── Clinical Context   EHR HER2 extraction · Attention-based cross-modal fusion
-        ├── Knowledge RAG      Starts empty by default · FAISS vector store semantic retrieval
-        └── Radiology Agent    DICOM parsing · CT/MRI ↔ H&E cross-modal correlation
-        │
-  Layer 4: Verification
-        ├── Logic Agent        clinical and radiological discordance · internal consistency checks
-        ├── WHO Validator      taxonomy compliance against WHO 5th Edition (independent of Lauren class)
-        └── Confidence Calibrator  temperature scaling · energy-based OOD detection (LogSumExp)
-        │
-  Layer 5: Synthesis & Reporting
-        ├── Diagnosis Agent    dynamic holistic diagnosis · safe-fail human escalation · grade · TNM
-        ├── Explanation Agent  NL explanation · evidence citations · counterfactual note
-        └── Report Agent       structured pathology report (WHO/Lauren/TNM/biomarkers)
-        │
-  Layer 6: Human Interface
-        ├── UI Renderer        self-contained HTML pathologist report
-        ├── MDT Exporter       MDT presentation text
-        └── Feedback Capture   structured pathologist disagreement logging (JSONL)
-```
 
-**Key design principles**:
-- Separate LLM planning from image execution (TissueLab pattern)
-- Natural language explanations over heatmaps (PathFinder pattern)
-- Explicit verification before every diagnosis output (WSI-Agents pattern)
-- Graceful degradation when modalities are missing
-- Calibrated uncertainty with actionable abstention and safe-fail human escalation
+**Key Design Principles**:
+- **Separation of LLM Planning & Image Execution**: Based on the TissueLab pattern.
+- **Natural Language Explanations**: Overlays traditional heatmaps to reduce cognitive load (PathFinder pattern).
+- **Explicit Verification**: Ensures independent validation via WHO taxonomy and clinical logic prior to reporting (WSI-Agents pattern).
+- **Graceful Degradation**: System handles missing modalities (like radiology) seamlessly.
+- **Actionable Abstention**: The pipeline employs temperature scaling and energy-based OOD detection to escalate ambiguous or low-confidence slides directly to human pathologists.
+
+### Execution Flow
+
+The orchestrator dynamically routes slides based on triage results, effectively bypassing intensive compute layers for obvious benign cases while ensuring rigorous evidence collection for malignancies. VRAM is stringently managed through sequential agent execution, ensuring stability on constrained environments like Kaggle T4 GPUs.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as scripts/run_pipeline.py
+    participant Multi as MultiSlidePipeline
+    participant Pipe as HistopathologyPipeline
+    participant Agents as Layer 0-5 Agents
+    participant UI as Layer 6 UI/Exporter
+
+    User->>CLI: python run_pipeline.py --config config/kaggle.yaml ...
+    CLI->>Multi: Initialize with PipelineConfig
+    Multi->>Pipe: Execute pipeline for each WSI
+    
+    Pipe->>Agents: Layer 0: Load WSI & Run QC
+    alt QC Failed
+        Agents-->>Pipe: Reject Slide
+    else QC Passed
+        Pipe->>Agents: Layer 1: Router Agent (Triage)
+        alt Benign
+            Agents-->>Pipe: Fast-path (Skip Layers 2-4)
+        else Ambiguous
+            Agents-->>Pipe: Escalate to Human (Abstain)
+        else Malignant/Complex
+            Note over Pipe,Agents: VRAM Offloading: Models load/unload sequentially
+            Pipe->>Agents: Layer 2: Evidence Collection
+            Pipe->>Agents: Layer 3: Multimodal Fusion
+            Pipe->>Agents: Layer 4: Verification
+            alt Low Confidence (Verification Failed)
+                Agents-->>Pipe: Escalate to Human (Abstain)
+            else High Confidence
+                Pipe->>Agents: Layer 5: Synthesis (Diagnosis & Report)
+            end
+        end
+    end
+    
+    Pipe-->>Multi: Return PipelineResult
+    Multi->>Multi: Aggregate results (Longitudinal Agent)
+    Multi-->>CLI: Return MultiSlideResult
+    
+    CLI->>UI: Render HTML Report / MDT Summary
+    UI-->>User: Save outputs to disk
+```
 
 ---
 
-## Quick start
+## Quick Start
 
-### Install
+### Install System Dependencies
 
-For Kaggle or similar environments (ensure Internet is toggled ON), you must install the system prerequisites and model dependencies first:
+For robust WSI parsing and archive handling (especially on Kaggle):
 ```bash
 apt-get update && apt-get install -y openslide-tools unrar
-pip install "hakim_ai[models]"
 ```
 
-### Install Python Dependencies
+### Install Python Environment
 
+Clone and install with the full suite of foundation models and data management tools:
 ```bash
 git clone https://github.com/sudouserx/hakim_ai
 cd hakim_ai
-pip install -e ".[dev,data]"
+pip install -e ".[dev,data,models]"
+```
+
+Provide a `.env` file in the root directory if utilizing Hugging Face models (like UNI2 or LLAVA):
+```env
+HF_TOKEN=hf_your_huggingface_token
 ```
 
 ### Dataset Preparation
 
-The pipeline includes an automated data manager to acquire and preprocess datasets from their official sources:
+The pipeline includes an automated, resilient data manager to acquire and preprocess datasets from official sources. It includes robust retry logic and exponential backoff to handle transient API failures (e.g., from cBioPortal).
 
 ```bash
 # Download and prepare all datasets (TCGA-STAD, GasHisSDB, GCHTID)
 python scripts/prepare_data.py --all
 
-# Download a specific dataset (use --max-slides on Kaggle to avoid filling scratch space)
+# Download a specific dataset (Use --max-slides for fast testing or limited storage)
 python scripts/prepare_data.py --dataset tcga-stad --max-slides 50
 
-# Preview operations without downloading
+# Dry-run to preview operations without downloading
 python scripts/prepare_data.py --all --dry-run
 ```
 
-### Train the models
+### Configuration
 
-The training scripts are located within the `hakim_ai/training/` directory. They all accept a `--config` argument to parse hyperparameters.
+Configuration is centralized via `hakim_ai/config.py` leveraging environment-specific YAML files located in `config/`. 
+Environment configs dynamically merge over the default settings, ensuring type-safe access to variables across the system without redundant declarations.
 
-You execute them from the command line using:
+Available environments:
+- `config/default.yaml`: Base settings.
+- `config/kaggle.yaml`: Tailored for T4 single-GPU constraints (disables parallel multislide to prevent VRAM exhaustion).
+- `config/prod.yaml`: Multi-GPU setup for high-throughput parallel processing.
+- `config/test.yaml`: Minimal resource configuration for CI/CD.
 
-    For the MIL Classifier: python hakim_ai/training/train_mil_classifier.py --config config/kaggle.yaml
+### Model Training
 
-    For the Router Classifier: python hakim_ai/training/train_router.py --config config/kaggle.yaml
+The pipeline includes native, memory-efficient training loops utilizing **Focal Loss** to penalize majority classes and gradient accumulation for managing gigapixel MIL bags without tensor padding issues.
 
-    For the Segmentation Model: python hakim_ai/training/train_segmentation.py --config config/kaggle.yaml
+Execute training scripts via:
 
-### Run on a real slide
+```bash
+# Train the Multiple Instance Learning (MIL) model for Molecular / Subtype classification
+python hakim_ai/training/train_mil_classifier.py --config config/kaggle.yaml
+
+# Train the Routing / Triage Classifier
+python hakim_ai/training/train_router.py --config config/kaggle.yaml
+
+# Train the Semantic Segmentation Model
+python hakim_ai/training/train_segmentation.py --config config/kaggle.yaml
+```
+
+After training, threshold optimization can be calibrated automatically:
+```bash
+python scripts/calibrate_thresholds.py --config config/kaggle.yaml
+```
+
+### Running the Full Pipeline
+
+Use the unified CLI entry point `scripts/run_pipeline.py` to evaluate slides. This invokes the `MultiSlidePipeline` orchestrator capable of analyzing single or multiple sequential biopsies.
 
 ```bash
 python scripts/run_pipeline.py \
@@ -123,250 +231,57 @@ python scripts/run_pipeline.py \
     --save-report --save-mdt
 ```
 
-### Run tests
+### Running Tests
+
+The test suite validates agents, logic, and orchestrators completely isolated from real model weights, ensuring rapid iterative feedback.
 
 ```bash
-pytest                          # all tests
-pytest --cov=hakim_ai           # with coverage
+pytest                          # Run all tests
+pytest --cov=hakim_ai           # Run with coverage
 ```
 
 ---
 
-## Project structure
+## Datasets and Annotations
 
-```
-hakim_ai/
-├── config/
-│   ├── default.yaml            # default configuration
-│   ├── prod.yml                # Production multi-GPU configuration
-│   ├── kaggle.yaml             # Kaggle T4 single-GPU constraint configuration
-│   └── test.yaml               # CI/CD test configuration
-├── hakim_ai/
-│   ├── __init__.py             # public API
-│   ├── types.py                # all typed dataclasses
-│   ├── config.py               # PipelineConfig + sub-configs + dotenv support
-│   ├── pipeline.py             # HistopathologyPipeline orchestrator (Thread-safe, GPU cleanup)
-│   ├── multi_slide_pipeline.py # ThreadPoolExecutor for concurrent slide batch processing
-│   ├── foundation_models/      # Encoders and VLM adapters
-│   ├── layer0_input/           # WSI Loading & QC Agents
-│   ├── layer1_router/          # Triage / routing agents
-│   ├── layer2_evidence/        # Navigation, Segmentation, Description agents
-│   ├── layer3_fusion/          # Molecular, Clinical, Knowledge (RAG), and Radiology agents
-│   ├── layer4_verification/    # Logic checks, WHO validation, Confidence calibration
-│   ├── layer5_synthesis/       # Diagnosis and Report construction
-│   ├── layer6_interface/       # HTML rendering and structured feedback capture
-│   ├── models/                 # PyTorch architectures (ABMIL, MultiTaskHead)
-│   ├── training/               # Model fine-tuning logic, dataset loaders, and data manager
-│   │   └── data_manager.py     # Central orchestrator for dataset acquisition
-│   └── utils/                  # Core image processing, masking, and FAISS store utilities
-├── scripts/
-│   ├── run_pipeline.py         # CLI entry point
-│   ├── calibrate_thresholds.py # Threshold calibration via PyTorch inference
-│   └── prepare_data.py         # CLI for downloading/preparing datasets
-└── pyproject.toml
-```
+The dataset infrastructure automatically structures raw data into standard formats suitable for training the `hakim_ai` agents.
 
----
-
-## Configuration
-
-The configuration resides in the `config/` directory and is governed by `hakim_ai/config.py`. The `PipelineConfig` dataclass acts as a robust, typed central truth for the entire pipeline, exposing dataset paths, scaling hyper-parameters, hardware toggles, and model selections.
-
-```yaml
-
-log_level: INFO
-parallel_multi_slide: false   # Enable to process multiple WSIs concurrently via ThreadPoolExecutor
-
-qc:
-  min_stain_quality: 0.50
-  min_coverage: 0.30          # Scales dynamically for biopsies vs large resections
-
-segmentation:
-  num_classes: 7
-  tissue_classes:
-    - background
-    - tumour
-    - stroma
-    - til
-    - necrosis
-    - normal_gland
-    - muscle
-
-molecular:
-  msi_threshold: 0.53         # P(MSI-H) above this → MSI-H label
-
-verification:
-  calibrated: true            # utilizes optimized thresholds
-  temperature: 1.50           # temperature scaling parameters
-  abstention_threshold: 0.35
-
-data:
-  data_root: data/
-  tcga_stad_url: "https://www.cancerimagingarchive.net/collection/tcga-stad/"
-  gashis_url: "https://figshare.com/ndownloader/files/28969725"
-  gchtid_url: "https://figshare.com/ndownloader/files/46765759"
-  train_ratio: 0.70
-  val_ratio: 0.15
-  test_ratio: 0.15
-  gashis_patch_sizes: [160]
-
-training:
-  tcga_data_root: data/tcga-stad/
-  tcga_feature_dir: data/tcga-stad/features/
-  gashis_data_root: data/gashis/
-  gchtid_data_root: data/gchtid/
-  batch_size: 16
-  device: cuda
-```
-
-Load a custom config:
-
-```python
-from hakim_ai import HistopathologyPipeline, PipelineConfig
-
-cfg = PipelineConfig.from_yaml("config/prod.yml")
-pipeline = HistopathologyPipeline(cfg)
-```
-
----
-
-## Foundation Models & GPU Inference
-
-To use real model weights and enable hardware-accelerated processing:
-
-```bash
-pip install "hakim_ai[models]"
-```
-
-Provide a `.env` file in the root directory:
-```env
-HF_TOKEN=hf_your_huggingface_token
-```
-
-Then in your config:
-
-```yaml
-foundation_models:
-  patch_encoder: uni2       # loads MahmoodLab/UNI2-h from HuggingFace
-  slide_encoder: conch      # loads MahmoodLab/conch
-  vlm: pathchat             # loads microsoft/llava-med-v1.5-mistral-7b (4-bit)
-  use_gpu: true
-```
-
-Real encoder loading utilizes PyTorch `autocast` for memory-efficient forward passes and sequentially offloads models during execution. This memory lifecycle management ensures that the pipeline can run smoothly on memory-constrained hardware, such as a 15GB Kaggle T4 GPU. The multi-slide architecture streams WSI data to singleton GPU model instances via a thread-based concurrent queue to prevent VRAM thrashing and redundant instantiations.
-
----
-
-## Core Capabilities
-
-### Clinical Safety & Quality Control
-The pipeline prioritizes clinical safety by implementing a robust escalation system. The `DiagnosisAgent` strictly escalates indeterminate cases (e.g., low tumor fraction with no WHO criteria match) for manual review rather than defaulting to negative diagnoses. The `QCAgent` calculates a dynamic `min_coverage` threshold, appropriately adapting to the massive difference in tissue area between endoscopic biopsies and full surgical resections.
-
-### Model Training & Calibration
-The repository contains native training logic to fine-tune the pipeline's intelligence layers. The `train_mil_classifier.py` loop utilizes **Focal Loss** to penalize majority classes and learn rare minority features (EBV+, MSI-H). Memory-efficient unbatched gradient accumulation prevents tensor padding memory bombs when evaluating variable-length gigapixel MIL bags.
-
-The `calibrate_thresholds.py` script automatically runs inference over a validation set and uses Youden's J Statistic to calculate the optimal cutoffs balancing false-positives and false-negatives. 
-
-### Multi-Head Attention & Morphological Phenotyping
-The `GatedAttentionMIL` module features independent attention branches for each molecular prediction task (MSI, EBV, Lauren). During evidence collection, the `NavigationAgent` applies `K-Means` clustering on the patch feature embeddings. Selecting the highest-scoring patches per cluster ensures the VLM evaluates a comprehensive set of morphological phenotypes and avoids the diffuse carcinoma blindspot.
-
-### Advanced Verification
-Robustness is guaranteed via the `ConfidenceCalibrator` and `LogicAgent`. The calibrator calculates an energy-based Out-of-Distribution (OOD) score using the `LogSumExp` distribution across molecular logits to abstain from evaluating ambiguous samples. The `WHOValidator` rigorously evaluates morphological descriptions against the WHO 5th Edition taxonomy, completely independent of the Lauren classification taxonomy.
-
-### Attention-Based Fusion
-The system extracts real DICOM metadata via `pydicom` to provide radiology context. Cross-modal correlation fuses this and other unstructured clinical histories with the histopathology features by computing the dot-product cosine similarity between the CONCH NLP embeddings and visual patch vectors. HER2 status is extracted exclusively via the `ClinicalContextAgent` (EHR/IHC reports) to bypass inaccurate H&E morphological hallucinations.
-
----
-
-## Datasets
-
-The pipeline expects data directories configured directly in the `TrainingConfig` layer, targeting the specific schemas of distinct open-source datasets. Use the included `prepare_data.py` script to automatically download, split, and format the sources into training-ready artifacts.
-
-| Dataset | Content | Access | Handler Mechanics |
+| Dataset | Content | Access | Processing |
 |---|---|---|---|
-| TCGA-STAD | ~400 WSIs + Clinical | Public (GDC portal) | Queries SVS UUIDs from GDC API. Reconstructs clinical metadata by merging demography from cBioPortal `stad_tcga` with molecular targets (MSI, EBV, Lauren) from `stad_tcga_pub`. |
-| GasHisSDB | 245K patches | Public (Zenodo) | Downloads raw `.rar` archive, strictly filters patches to 160×160 resolution, and generates a standardized train/val/test split. |
-| GCHTID | 31K images, TME labels | Public (figshare 2024) | Automatically translates the source 9-class annotation scheme into a robust 7-class taxonomy, generating multi-class pseudo-masks. |
-| NCT-CRC-HE-100K | 100K patches | Public (Zenodo) | Pretraining patch encoder (external dependency). |
+| **TCGA-STAD** | ~400 WSIs + Clinical EHR | Public (GDC) | Fetches WSI via GDC. Merges `stad_tcga` demography with `stad_tcga_pub` molecular targets (MSI, EBV, Lauren). |
+| **GasHisSDB** | 245K uniform patches | Public (Zenodo) | Processes raw RAR archives, strict 160×160 resolution filtering, deterministic split generation. |
+| **GCHTID** | 31K images, TME labels | Public (figshare) | Maps raw 9-class annotations into a 7-class standardized taxonomy for segmentation. |
+| **NCT-CRC-HE** | 100K patches | Public (Zenodo) | Used strictly as pretraining proxy data for generalized tissue segmentation. |
 
-> [!WARNING]
-> GCHTID labels are weak proxy labels derived from cross-domain transfer (NCT-CRC-HE-100K colorectal annotations applied to gastric WSIs). Downstream models should be treated as tile-level tissue-composition estimators rather than pixel-precise boundary segmenters.
-
----
-
-## Explainability
-
-The system produces three complementary explanation modalities:
-
-1. **Natural language narratives** — patch-level descriptions generated by the Description Agent (PathChat/CONCH VLM), aggregated by the Explanation Agent into a diagnostic narrative
-2. **Visual importance map** — 16×16 heat map rendered in the HTML report showing which WSI regions contributed most to the routing and molecular predictions
-3. **Counterfactual note** — verbal approximation of "what would change the prediction" (e.g. "If TIL density were <5%, MSI-H prediction would shift toward MSS")
-
-Known limitations (from architecture synthesis):
-- Attention ≠ causation: importance maps indicate correlation, not causal evidence
-- Counterfactuals at gigapixel scale are technically unsolved; verbal approximations are used
-- HER2 from H&E is indicative only — IHC/FISH is always required for clinical decisions
+> [!CAUTION]
+> The GCHTID labels are weak proxy boundaries. The segmentation outputs function as tile-level tissue-composition estimators, not pixel-perfect delineators.
 
 ---
 
-## Adding a new agent
+## Core Capabilities Highlights
 
-1. Create `hakim_ai/layer{N}_{name}/my_agent.py`
-2. Define typed `run(inputs) -> Output` method
-3. Add to the layer's `__init__.py`
-4. Wire into `pipeline.py` at the appropriate layer
-5. Add fixtures to `tests/conftest.py` and tests to `tests/test_layer{N}_*.py`
+- **Dynamic Navigation & Morphological Phenotyping**: The `NavigationAgent` clusters patch feature embeddings (via K-Means) and extracts high-confidence phenotypes, guaranteeing the downstream VLM evaluates an exhaustively representative set of tumor morphologies.
+- **Attention-Based Clinical Fusion**: By computing dot-product cosine similarity between Vision-Language textual embeddings and clinical EHR text, the system seamlessly fuses unstructured data into the visual feature space.
+- **Verification Calibrator**: Calculates LogSumExp distributions over model logits to catch "Out of Distribution" (OOD) inferences. Instead of providing confident wrong answers on unexpected tissue artifacts, the pipeline immediately halts and flags for a human pathologist.
 
 ---
 
-## Citation
+## Citation & Attribution
 
-If you use this codebase in research, please cite:
+If you utilize this codebase for academic research, please cite:
 
 ```bibtex
 @software{histopath_ai_2025,
-  title  = {histopath\_ai: End-to-end explainable multi-agent histopathology AI for gastric cancer},
+  title  = {hakim\_ai: End-to-end explainable multi-agent histopathology AI for gastric cancer},
   year   = {2025},
   note   = {Architecture based on PathFinder (ICCV 2025), WSI-Agents (MICCAI 2025),
             and TissueLab (arXiv 2509.20279)},
 }
 ```
 
-This project integrates foundation models that require proper attribution. If you use this software, you must cite **CONCH** and **UNI**:
-
-### CONCH
-```bibtex
-@article{lu2024avisionlanguage,
-  title={A visual-language foundation model for computational pathology},
-  author={Lu, Ming Y and Chen, Bowen and Williamson, Drew FK and Chen, Richard J and Liang, Ivy and Ding, Tong and Jaume, Guillaume and Odintsov, Igor and Le, Long Phi and Gerber, Georg and others},
-  journal={Nature Medicine},
-  pages={863–874},
-  volume={30},
-  year={2024},
-  publisher={Nature Publishing Group}
-}
-```
-
-### UNI
-```bibtex
-@article{chen2024uni,
-  title={Towards a General-Purpose Foundation Model for Computational Pathology},
-  author={Chen, Richard J and Ding, Tong and Lu, Ming Y and Williamson, Drew FK and Jaume, Guillaume and Chen, Bowen and Zhang, Andrew and Shao, Daniel and Song, Andrew H and Shaban, Muhammad and others},
-  journal={Nature Medicine},
-  publisher={Nature Publishing Group},
-  year={2024}
-}
-```
-*Note: Works that use UNI should also attribute ViT and DINOv2.*
-
-Key references implemented:
-- **PathFinder** (Ghezloo et al., ICCV 2025) — 4-agent NL explanation design
-- **WSI-Agents** (Lyu et al., MICCAI 2025 Oral) — verification mechanism
-- **TissueLab** (arXiv:2509.20279) — LLM planning vs. local model execution
-- **UNI 2** (Chen et al., Nature Medicine 2024) — patch encoder backbone
-- **CONCH / TITAN** (Lu et al., Nature Medicine 2024) — vision-language encoder
-- **Kather et al.** (Nature Medicine 2019) — H&E-based MSI prediction anchor
-- **Liu et al.** (NeurIPS 2020) — Energy-based Out-of-Distribution Detection
+**Foundation Models**: This system dynamically loads models requiring explicit attribution in downstream works:
+- **CONCH**: Lu et al., *Nature Medicine* 2024.
+- **UNI2**: Chen et al., *Nature Medicine* 2024.
 
 ---
 
@@ -374,4 +289,4 @@ Key references implemented:
 
 MIT License — see `LICENSE` for details.
 
-> This software is provided for research purposes only. It is not a medical device and has not received regulatory clearance (FDA, CE-IVD, or equivalent). All AI-generated diagnostic outputs require review and sign-off by a qualified pathologist before any clinical action.
+> **Disclaimer**: This software is provided for research purposes only. It is not a medical device and has not received regulatory clearance (FDA, CE-IVD, or equivalent). All AI-generated diagnostic outputs require review and sign-off by a qualified pathologist before any clinical action.
