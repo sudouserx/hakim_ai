@@ -77,7 +77,7 @@ class HistologicalGradeClassifier(nn.Module):
             except Exception as e:
                 logger.error(f"Failed to load GradeClassifier weights: {e}")
                 return None
-        logger.warning(f"GradeClassifier checkpoint not found at {checkpoint_path}. Grade classification will fail loudly.")
+        logger.info(f"GradeClassifier checkpoint not found at {checkpoint_path}. Grade classification will fall back to safe abstention.")
         return None
 
     def predict_grade(self, feature_vector: list[float], device: Any) -> str:
