@@ -27,7 +27,7 @@
         │
   Layer 1: Router / Triage     benign fast-path · complexity scoring · human escalation
         │
-  Layer 2: Evidence Collection (Concurrent ThreadPool)
+  Layer 2: Evidence Collection (Sequential)
         ├── Navigation Agent   K-Means phenotype clustering · importance map · ROI selection
         ├── Segmentation Agent tissue compartments · TIL density · TME profile
         └── Description Agent  NL patch descriptions via VLM (PathChat / CONCH)
@@ -35,7 +35,7 @@
   Layer 3: Multimodal Fusion
         ├── Molecular Agent    MSI · Lauren · EBV prediction via Multi-Head Attention MIL
         ├── Clinical Context   EHR HER2 extraction · Attention-based cross-modal fusion
-        ├── Knowledge RAG      FAISS vector store semantic retrieval · WHO criteria · Guidelines
+        ├── Knowledge RAG      Starts empty by default · FAISS vector store semantic retrieval
         └── Radiology Agent    DICOM parsing · CT/MRI ↔ H&E cross-modal correlation
         │
   Layer 4: Verification
@@ -66,6 +66,13 @@
 ## Quick start
 
 ### Install
+
+For Kaggle or similar environments, you must install the system prerequisites first:
+```bash
+apt-get update && apt-get install -y openslide-tools unrar
+```
+
+### Install Python Dependencies
 
 ```bash
 git clone https://github.com/sudouserx/hakim_ai
@@ -185,7 +192,7 @@ segmentation:
     - muscle
 
 molecular:
-  msi_threshold: 0.50         # P(MSI-H) above this → MSI-H label
+  msi_threshold: 0.53         # P(MSI-H) above this → MSI-H label
 
 verification:
   calibrated: true            # utilizes optimized thresholds
