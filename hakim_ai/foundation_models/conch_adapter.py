@@ -26,8 +26,9 @@ class CONCHEncoder(BaseEncoder):
 
     EMBEDDING_DIM = 512
 
-    def __init__(self, model_variant: str = "conch"):
+    def __init__(self, model_variant: str = "conch", use_gpu: bool = True):
         self.model_variant = model_variant
+        self.use_gpu = use_gpu
         self._model = None
 
     @property
@@ -127,7 +128,7 @@ class CONCHEncoder(BaseEncoder):
         if hf_token:
             login(token=hf_token)
 
-        self.device = getattr(self, "device", "cuda" if torch.cuda.is_available() else "cpu")
+        self.device = getattr(self, "device", "cuda" if self.use_gpu and torch.cuda.is_available() else "cpu")
         
         from huggingface_hub import hf_hub_download
         model_name = "MahmoodLab/CONCH"
@@ -142,7 +143,7 @@ class CONCHEncoder(BaseEncoder):
                 vision_state_dict = state_dict
             self._model.load_state_dict(vision_state_dict, strict=False)
         except Exception as e:
-            print(f"Warning: Failed to download CONCH weights: {e}")
+            raise RuntimeError(f"Failed to download CONCH weights: {e}") from e
             
         self._model = self._model.eval().to(self.device)
         
@@ -169,8 +170,9 @@ class PathChatVLM(BaseVLM):
     Requires PathChat model weights and GPU.
     """
 
-    def __init__(self, seed: int = 42):
+    def __init__(self, seed: int = 42, use_gpu: bool = True):
         self._rng = random.Random(seed)
+        self.use_gpu = use_gpu
         self._model = None
         self._processor = None
 
@@ -211,7 +213,7 @@ class PathChatVLM(BaseVLM):
         if hf_token:
             login(token=hf_token)
 
-        self.device = getattr(self, "device", "cuda" if torch.cuda.is_available() else "cpu")
+        self.device = getattr(self, "device", "cuda" if self.use_gpu and torch.cuda.is_available() else "cpu")
         model_name = "wnkh/llava-med-v1.5-mistral-7b-hf"
         
         try:

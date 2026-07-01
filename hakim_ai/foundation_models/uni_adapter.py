@@ -28,11 +28,12 @@ class UNI2Encoder(BaseEncoder):
 
     EMBEDDING_DIM = 1536   # ViT-H output dimension for UNI 2
 
-    def __init__(self, device: str = None):
+    def __init__(self, device: str = None, use_gpu: bool = True):
+        self.use_gpu = use_gpu
         if device is None:
             try:
                 import torch
-                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+                self.device = "cuda" if self.use_gpu and torch.cuda.is_available() else "cpu"
             except ImportError:
                 self.device = "cpu"
         else:

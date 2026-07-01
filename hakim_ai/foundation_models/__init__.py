@@ -9,9 +9,9 @@ def build_patch_encoder(cfg: FoundationModelConfig) -> BaseEncoder:
     """Factory: return the configured patch encoder."""
     name = cfg.patch_encoder.lower()
     if name in ("uni2", "uni"):
-        return UNI2Encoder()
+        return UNI2Encoder(use_gpu=cfg.use_gpu)
     if name in ("conch", "titan"):
-        return CONCHEncoder()
+        return CONCHEncoder(use_gpu=cfg.use_gpu)
     raise ValueError(f"Unknown patch encoder: {cfg.patch_encoder}")
 
 
@@ -19,7 +19,7 @@ def build_vlm(cfg: FoundationModelConfig) -> BaseVLM:
     """Factory: return the configured VLM."""
     name = cfg.vlm.lower()
     if name == "pathchat":
-        return PathChatVLM()
+        return PathChatVLM(use_gpu=cfg.use_gpu)
     raise ValueError(f"Unknown VLM: {cfg.vlm}")
 
 

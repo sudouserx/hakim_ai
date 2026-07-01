@@ -68,9 +68,8 @@ class OpenSlideWSILoader(BaseWSILoader):
 
         slide = openslide.OpenSlide(wsi_input.wsi_path)
         thumb = slide.get_thumbnail(self.THUMBNAIL_SIZE)
-        # Convert PIL Image to list-of-lists for the type layer efficiently
         import numpy as np
-        thumb_list = np.array(thumb).tolist()
+        thumb_array = np.array(thumb)
 
         dimensions = [slide.level_dimensions[i] for i in range(slide.level_count)]
         mpp_x = float(slide.properties.get(openslide.PROPERTY_NAME_MPP_X, 0.25))
@@ -84,7 +83,7 @@ class OpenSlideWSILoader(BaseWSILoader):
         return WSIData(
             patient_id=wsi_input.patient_id,
             wsi_path=wsi_input.wsi_path,
-            thumbnail=thumb_list,
+            thumbnail=thumb_array,
             tile_paths=[],
             level_dimensions=dimensions,
             level_count=len(dimensions),
