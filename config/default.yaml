@@ -48,7 +48,7 @@ segmentation:
 
 # ── Layer 2: Patch Description ───────────────────────────────────────────────
 description:
-  vlm_model: pathchat          # pathchat | conch
+  # vlm_model: pathchat          # pathchat | conch
   max_patches_to_describe: 5
   max_tokens: 256
 
@@ -56,7 +56,7 @@ description:
 molecular:
   model: multi_task_head
   msi_threshold: 0.53
-  her2_threshold: 0.50
+  # her2_threshold: 0.50
   ebv_threshold: 0.48
 
 # ── Layer 3: RAG ─────────────────────────────────────────────────────────────
@@ -81,27 +81,27 @@ foundation_models:
 
 # ── Layer 6: UI ──────────────────────────────────────────────────────────────
 ui:
-  output_dir: outputs
+  output_dir: /kaggle/working/outputs
   html_report: true
-  mdt_export: true
+  mdt_export: false
 
 # ── Training ─────────────────────────────────────────────────────────────────
 training:
-  tcga_data_root: data/tcga-stad/
-  tcga_feature_dir: data/tcga-stad/features/
-  tcga_manifest_csv: data/tcga-stad/manifest.csv
-  gashis_data_root: data/gashis/
-  gchtid_data_root: data/gchtid/
-  batch_size: 32
+  tcga_data_root: /kaggle/tmp/data/tcga-stad/
+  tcga_feature_dir: /kaggle/tmp/data/tcga-stad/features/
+  tcga_manifest_csv: /kaggle/tmp/data/tcga-stad/manifest.csv
+  gashis_data_root: /kaggle/tmp/data/gashis/
+  gchtid_data_root: /kaggle/tmp/data/gchtid/
+  batch_size: 64             # Increased batch size operates on pre-extracted feature vectors, not raw WSI
   learning_rate: 0.0001
-  num_epochs: 50
-  num_folds: 5
-  checkpoint_dir: checkpoints/
-  device: auto
+  num_epochs: 1      #20
+  num_folds: 3
+  device: cuda
+  checkpoint_dir: /kaggle/tmp/checkpoints
 
 # ── Data Acquisition ────────────────────────────────────────────────────────
 data:
-  data_root: data/
+  data_root: /kaggle/tmp/data/
   tcga_stad_url: "https://www.cancerimagingarchive.net/collection/tcga-stad/"
   gashis_url: "https://figshare.com/ndownloader/files/28969725"
   gchtid_url: "https://figshare.com/ndownloader/files/46765759"
