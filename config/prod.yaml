@@ -2,22 +2,15 @@
 # Configured for high-end server environments with multiple GPUs.
 
 pipeline_name: histopath_ai_prod
-log_level: INFO
 output_dir: /var/lib/hakim_ai/outputs
 parallel_multi_slide: true    # Enabled to utilize high CPU/RAM resources
-
-foundation_models:
-  use_gpu: true
 
 verification:
   calibrated: true
 
 training:
   batch_size: 128               # High batch size for multi-GPU
-  learning_rate: 0.0001
   num_epochs: 100
-  num_folds: 5
-  device: cuda                  # PyTorch Lightning or similar will parallelize across devices
   tcga_data_root: /data/histopath/tcga-stad/
   tcga_feature_dir: /data/histopath/tcga-stad/features/
   tcga_manifest_csv: /data/histopath/tcga-stad/manifest.csv
@@ -27,6 +20,4 @@ training:
 
 ui:
   output_dir: /var/lib/hakim_ai/outputs
-  html_report: true
-  mdt_export: true
   feedback_db_path: /var/lib/hakim_ai/outputs/feedback.jsonl

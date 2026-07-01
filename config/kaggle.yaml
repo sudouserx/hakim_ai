@@ -2,8 +2,6 @@
 # Configured to prevent OOM errors on single 16GB VRAM instances.
 
 pipeline_name: histopath_ai_kaggle
-log_level: INFO
-parallel_multi_slide: false   # Must be false to avoid OOM on single GPU
 
 # Add lenient QC thresholds so real WSI passes Layer 0
 qc:
@@ -12,9 +10,6 @@ qc:
   min_coverage: 0.0
   min_stain_quality: 0.0
   reject_on_artifact: false
-
-foundation_models:
-  use_gpu: true
 
 navigation:
   top_k_patches: 2           # Reduced to save VRAM ( 10)
@@ -25,19 +20,8 @@ description:
 segmentation:
   checkpoint_path: /kaggle/tmp/checkpoints/segformer_gchtid.pt
 
-
 data:
   data_root: /kaggle/tmp/data/
-  tcga_stad_url: "https://www.cancerimagingarchive.net/collection/tcga-stad/"
-  gashis_url: "https://figshare.com/ndownloader/files/28969725"
-  gchtid_url: "https://figshare.com/ndownloader/files/46765759"
-  train_ratio: 0.70
-  val_ratio: 0.15
-  test_ratio: 0.15
-  gashis_patch_sizes: [160]
-  max_retries: 3
-  chunk_size_mb: 8
-  verify_checksums: true
   
 training:
   tcga_data_root: /kaggle/tmp/data/tcga-stad/
@@ -46,7 +30,6 @@ training:
   gashis_data_root: /kaggle/tmp/data/gashis/
   gchtid_data_root: /kaggle/tmp/data/gchtid/
   batch_size: 64             # Increased batch size operates on pre-extracted feature vectors, not raw WSI
-  learning_rate: 0.0001
   num_epochs: 1      #20
   num_folds: 3
   device: cuda
@@ -54,5 +37,4 @@ training:
 
 ui:
   output_dir: /kaggle/working/outputs
-  html_report: true
   mdt_export: false

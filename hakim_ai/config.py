@@ -188,35 +188,26 @@ class PipelineConfig:
     # ------------------------------------------------------------------ #
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "PipelineConfig":
+    def from_yaml(cls, path: Optional[str | Path] = None) -> "PipelineConfig":
         if not _YAML_AVAILABLE:
             raise ImportError("Install pyyaml: pip install pyyaml")
             
         cfg = cls()
-        default_path = Path("config/default.yaml")
-        if default_path.exists() and Path(path).resolve() != default_path.resolve():
-            with open(default_path) as fh:
-                default_raw = yaml.safe_load(fh) or {}
-            cfg = cls._from_dict(default_raw, base_cfg=cfg)
-            
-        with open(path) as fh:
-            raw: Dict[str, Any] = yaml.safe_load(fh) or {}
-            
-        if Path("thresholds.json").exists():
-            import json
-            try:
-                with open("thresholds.json") as f:
-                    thresholds = json.load(f)
-                if "molecular" not in raw:
-                    raw["molecular"] = {}
-                if "msi_threshold" in thresholds:
-                    raw["molecular"]["msi_threshold"] = thresholds["msi_threshold"]
-                if "ebv_threshold" in thresholds:
-                    raw["molecular"]["ebv_threshold"] = thresholds["ebv_threshold"]
-            except Exception as e:
-                logger.warning(f"Failed to load thresholds.json: {e}")
+        
+        if path is None:
+            env = os.environ.get("HAKIM_ENV")
+            if env:
+                path = Path(f"config/{env}.yaml")
+                if not path.exists():
+                    logger.warning(f"HAKIM_ENV is set to '{env}' but {path} does not exist. Using defaults.")
+                    path = None
+                    
+        if path is not None and Path(path).exists():
+            with open(path) as fh:
+                raw: Dict[str, Any] = yaml.safe_load(fh) or {}
+            cfg = cls._from_dict(raw, base_cfg=cfg)
                 
-        return cls._from_dict(raw, base_cfg=cfg)
+        return cfg
 
     @classmethod
     def _from_dict(cls, d: Dict[str, Any], base_cfg: Optional["PipelineConfig"] = None) -> "PipelineConfig":

@@ -5,35 +5,25 @@
 pipeline_name: histopath_ai_test
 log_level: WARNING
 output_dir: /tmp/histopath_ai_test
-parallel_multi_slide: false
 
 navigation:
   magnification_levels: [20, 40]
   top_k_patches: 5
   patch_size: 256
-  encoder_model: uni2
 
 segmentation:
-  model: segformer
   checkpoint_path: null
 
 description:
-  vlm_model: pathchat
   max_patches_to_describe: 2
   max_tokens: 128
-
-molecular:
-  model: multi_task_head
 
 rag:
   top_k_similar_cases: 2
   top_k_guidelines: 3
-  embedding_model: biomed_bert
 
 verification:
-  temperature: 1.50
-  abstention_threshold: 0.20    # Lower for test — fewer abstentions
-  calibrated: false
+  abstention_threshold: 0.20
 
 foundation_models:
   use_gpu: false
