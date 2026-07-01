@@ -4,12 +4,12 @@
 
 pipeline_name: histopath_ai_gastric
 version: "0.1.0"
-output_dir: outputs
 log_level: INFO
 parallel_multi_slide: false
 
 # ── Layer 0: Quality Control ────────────────────────────────────────────────
 qc:
+  qc_enabled: true
   min_stain_quality: 0.50
   min_focus_quality: 0.50
   min_coverage: 0.30
@@ -71,22 +71,19 @@ verification:
   temperature: 1.50            # temperature scaling parameter; >1 softens confidence
   abstention_threshold: 0.35
   ood_threshold: 0.25
-  calibrated: false
-  calibration_config: null
 
 # ── Foundation Models ────────────────────────────────────────────────────────
 foundation_models:
   patch_encoder: uni2
   slide_encoder: conch
   vlm: pathchat
-  use_gpu: false
+  use_gpu: true
 
 # ── Layer 6: UI ──────────────────────────────────────────────────────────────
 ui:
   output_dir: outputs
   html_report: true
   mdt_export: true
-  feedback_db_path: outputs/feedback.jsonl
 
 # ── Training ─────────────────────────────────────────────────────────────────
 training:

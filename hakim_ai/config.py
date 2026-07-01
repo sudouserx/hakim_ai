@@ -11,6 +11,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import os
+import logging
+
+if os.path.exists("/kaggle/tmp"):
+    os.environ.setdefault("HF_HOME", "/kaggle/tmp/huggingface")
+
+logger = logging.getLogger(__name__)
 
 try:
     from dotenv import load_dotenv
@@ -31,6 +37,7 @@ except ImportError:
 
 @dataclass
 class QCConfig:
+    qc_enabled: bool = True
     min_stain_quality: float = 0.5
     min_focus_quality: float = 0.5
     min_coverage: float = 0.3
@@ -96,8 +103,6 @@ class VerificationConfig:
     temperature: float = 1.5           # temperature scaling for calibration
     abstention_threshold: float = 0.35
     ood_threshold: float = 0.25
-    calibrated: bool = False
-    calibration_config: Optional[str] = None
 
 
 @dataclass
@@ -148,7 +153,6 @@ class UIConfig:
     output_dir: str = "outputs"
     html_report: bool = True
     mdt_export: bool = True
-    feedback_db_path: str = "outputs/feedback.jsonl"
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +164,6 @@ class PipelineConfig:
     """Root configuration object — single source of truth for all agents."""
     pipeline_name: str = "histopath_ai_gastric"
     version: str = "0.1.0"
-    output_dir: str = "outputs"
     log_level: str = "INFO"
 
     qc: QCConfig = field(default_factory=QCConfig)
@@ -214,8 +217,12 @@ class PipelineConfig:
                     for sub_key, sub_val in val.items():
                         if hasattr(sub_obj, sub_key):
                             setattr(sub_obj, sub_key, sub_val)
+                        else:
+                            logger.warning(f"Unknown config key: {key}.{sub_key}")
             elif hasattr(cfg, key):
                 setattr(cfg, key, val)
+            else:
+                logger.warning(f"Unknown config key: {key}")
         return cfg
 
     @classmethod

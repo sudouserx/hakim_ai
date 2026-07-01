@@ -65,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Output
     og = p.add_argument_group("Output options")
-    og.add_argument("--output-dir", default="outputs", help="Directory for report files")
+    og.add_argument("--output-dir", default=None, help="Directory for report files")
     og.add_argument("--save-report", action="store_true", help="Save HTML pathologist report")
     og.add_argument("--save-mdt", action="store_true", help="Save MDT text summary")
     og.add_argument("--json", action="store_true", dest="output_json", help="Print result as JSON")
@@ -85,7 +85,8 @@ def main() -> int:
         cfg = PipelineConfig.from_yaml(args.config)
     else:
         cfg = PipelineConfig.default()
-    cfg.ui.output_dir = args.output_dir
+    if args.output_dir is not None:
+        cfg.ui.output_dir = args.output_dir
     cfg.log_level = args.log_level
 
     # Build pipeline input
