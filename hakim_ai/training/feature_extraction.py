@@ -47,12 +47,13 @@ def extract_features(cfg: PipelineConfig, level: int = 1, patch_size: int = 256)
             tissue_mask = compute_tissue_mask(wsi_data.thumbnail)
             
             thumb_downsample = 128
-            if wsi_data.level_dimensions and wsi_data.thumbnail:
+            if wsi_data.level_dimensions is not None and wsi_data.thumbnail is not None:
                 try:
                     import numpy as np
-                    w_full = wsi_data.level_dimensions[0][0]
-                    thumb_w = len(wsi_data.thumbnail[0]) if isinstance(wsi_data.thumbnail, list) else np.array(wsi_data.thumbnail).shape[1]
-                    thumb_downsample = max(1, w_full // thumb_w)
+                    if len(wsi_data.level_dimensions) > 0:
+                        w_full = wsi_data.level_dimensions[0][0]
+                        thumb_w = len(wsi_data.thumbnail[0]) if isinstance(wsi_data.thumbnail, list) else np.array(wsi_data.thumbnail).shape[1]
+                        thumb_downsample = max(1, w_full // thumb_w)
                 except Exception:
                     pass
 
